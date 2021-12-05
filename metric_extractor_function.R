@@ -40,40 +40,6 @@ metric_extractor <- function(survey_identifier, subset_dataframe, number_of_surv
   df_new <- df_new[order(df_new$real_time),]
   df_new$species <- NA
   
-  # Use a loop to create a new dataframe that will include species per survey per timeframe (to avoid counting species 2x)
-  for (j in 1:nrow(df_new)) {
-    count <- 0
-    for (i in 1:nrow(sub_series)) {
-      if (sub_series[i, 8] == df_new[j, 2] & sub_series[i, 2] == df_new[j, 1]) {
-        count = count + 1
-      }
-    }
-    df_new[j, 3] <- count 
-  }  
-  
-  # Lastly, we can create a method to "count the unique species added at each timeframe".
-  # This allows us to make a quick assessment on whether or not finding a novel community here
-  # will actually be likely or not.
-  
-  `%!in%` <- Negate(`%in%`)
-  species_checklist <- subset(sub_series, sub_series$SurveyID == min(sub_series$SurveyID))
-  species_checklist <- matrix(unique(species_checklist[, c("Species")]))
-  df_new$new_species <- 0
-  df_new[1,4] <- nrow(species_checklist)
-  
-  for (j in 2:nrow(df_new)) {
-    count = 0
-    for (i in 1:nrow(sub_series)) {
-      if (sub_series[i, 2] == df_new[j, 1]) {
-        if (sub_series[i, 5] %!in% species_checklist) {
-          count <- count + 1
-          species_checklist <- rbind(sub_series[i,5], species_checklist)
-        }
-      }
-    }
-    df_new[j, 4] <- count
-  }  
-  
   # These conditionals are for the selection of output.
   
   if (subset_dataframe == 1) {
@@ -97,10 +63,43 @@ metric_extractor <- function(survey_identifier, subset_dataframe, number_of_surv
   }  
   
   if (useful_df == 1) {
+    # Use a loop to create a new dataframe that will include species per survey per timeframe (to avoid counting species 2x)
+    for (j in 1:nrow(df_new)) {
+      count <- 0
+      for (i in 1:nrow(sub_series)) {
+        if (sub_series[i, 8] == df_new[j, 2] & sub_series[i, 2] == df_new[j, 1]) {
+          count = count + 1
+        }
+      }
+      df_new[j, 3] <- count 
+    }  
+    
+    # Lastly, we can create a method to "count the unique species added at each timeframe".
+    # This allows us to make a quick assessment on whether or not finding a novel community here
+    # will actually be likely or not.
+    
+    `%!in%` <- Negate(`%in%`)
+    species_checklist <- subset(sub_series, sub_series$SurveyID == min(sub_series$SurveyID))
+    species_checklist <- matrix(unique(species_checklist[, c("Species")]))
+    df_new$new_species <- 0
+    df_new[1,4] <- nrow(species_checklist)
+    
+    for (j in 2:nrow(df_new)) {
+      count = 0
+      for (i in 1:nrow(sub_series)) {
+        if (sub_series[i, 2] == df_new[j, 1]) {
+          if (sub_series[i, 5] %!in% species_checklist) {
+            count <- count + 1
+            species_checklist <- rbind(sub_series[i,5], species_checklist)
+          }
+        }
+      }
+      df_new[j, 4] <- count
+    } 
+    
     return(df_new)
   }
 }
 
 # Example usage
 test <- metric_extractor("G1037", 0, 0, 0, 0, 0, 1)
-test
