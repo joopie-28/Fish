@@ -120,7 +120,7 @@ proportion_df_function <- function(survey_identifier){
 }
 
 # Test!
-test <- proportion_df_function("G9")
+test <- proportion_df_function("G10000")
 test
 
 

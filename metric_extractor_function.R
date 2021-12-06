@@ -11,7 +11,7 @@ Survey_Data <- read.csv("1873_2_RivFishTIME_SurveyTable.csv")
 # I've made this function special, it's a bit weird, but the input allows you to decide what you want from the function.
 # the "survey_identifier" input is the name of the survey (e.g. "G1034"), the other inputs are binary variables. Pick the one
 # you want to extract and input 1 for that variable and 0 for all others (note, if you put 1 for more than one decider variable,
-# an error will occur). The output varies from single numbers, to strings, to complete dataframes.
+# an error will occur). The output varies from single numbers, to strings, to complete data frames.
 metric_extractor <- function(survey_identifier, subset_dataframe, number_of_surveys, timeseries_timepoints, time_range, species_in_survey, useful_df) {
   
   # Create the subset we're interested in, aka the timeseries we're interested in.
@@ -102,4 +102,5 @@ metric_extractor <- function(survey_identifier, subset_dataframe, number_of_surv
 }
 
 # Example usage
-test <- metric_extractor("G1037", 0, 0, 0, 0, 0, 1)
+test <- metric_extractor("G1034", 0, 0, 0, 0, 0, 1)
+test
