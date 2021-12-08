@@ -74,7 +74,7 @@ abundance_df_function <- function(survey_identifier){
 }
 
 # Test!
-test <- abundance_df_function("G10")
+test <- abundance_df_function("G1034")
 test
 
 # Finally, one last idea which might be useful down the track. Creating a data frame that shows the relative proportion of each species within
@@ -120,8 +120,8 @@ proportion_df_function <- function(survey_identifier){
 }
 
 # Test!
-test <- proportion_df_function("G10000")
-test
+b <- proportion_df_function("G1034")
+b
 
 
 
