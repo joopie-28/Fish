@@ -44,7 +44,7 @@ binary_converter_function <- function(survey_identifier){
   # Let's populate this data frame. I will use the column and row names to loop through a subset of the data
   # a couple times. This will essentially crosscheck if a species is present in the set or not. 
   for (i in 1:nrow(binary_df)) {
-    sub_temp <- subset(sub_series, rownames(abundance_df)[i])
+    sub_temp <- subset(sub_series, SurveyID == rownames(binary_df)[i])
     for (j in 1:ncol(binary_df)) {
       if (colnames(binary_df[j]) %in% sub_temp$Species){
         binary_df[i,j] <- 1

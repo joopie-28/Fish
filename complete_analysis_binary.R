@@ -2,7 +2,6 @@
 
 # This is the presence/absence data pathway. Remember to load in functions, which are stored in separate files.
 
-
 # Assign individual time series to BioRealm groups
 
 palearctic_ID <- as.list(subset(time_series_data, BioRealm == "Palearctic")[,3])
@@ -15,237 +14,133 @@ neotropics_ID <- as.list(subset(time_series_data, BioRealm == "Neotropics")[,3])
 
 australasia_ID <- as.list(subset(time_series_data, BioRealm == "Australasia")[,3])
 
-# Store them in a list
+# Create a list to hold these, serves as input for the matrix creator
+ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID )
 
-check <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
-names(check) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
+names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
 
-# Store the presence/absence matrices in the list according to BioRealm
+# Create matrix list using this function
+list_matrix_function <- function(check_list){
 
-palearctic_matrices <- lapply(check$palearctic_ID, function(TimeSeries_ID){
+  for (i in 1:length(ID_list)) {
+    nam <- lapply(check_list[[i]][], 
+             function(TimeSeries_ID){
+               print(TimeSeries_ID)
+               temp <- binary_converter_function(TimeSeries_ID)
+               if(class(temp)=="matrix"){
+                 # remove bins within sites with fewer species than cut off
+                 temp <- temp[rowSums(temp) > rich.cutoff,]
+                 }
+               return(temp)
+      }) 
   
-  print(TimeSeries_ID)
-  temp <- binary_converter_function(TimeSeries_ID)
-  if(class(temp)=="matrix"){
-    # remove bins within sites with fewer species than cut off
-    temp <- temp[rowSums(temp) > rich.cutoff,]
-  }
-  return(temp)
-})
-names(palearctic_matrices) <- check$palearctic_ID
-
-nearctic_matrices <- lapply(check$nearctic_ID, function(TimeSeries_ID){
-  
-  print(TimeSeries_ID)
-  temp <- binary_converter_function(TimeSeries_ID)
-  if(class(temp)=="matrix"){
-    # remove bins within sites with fewer species than cut off
-    temp <- temp[rowSums(temp) > rich.cutoff,]
-  }
-  return(temp)
-})
-names(nearctic_matrices) <- check$nearctic_ID
-
-afrotropics_matrices <- lapply(check$afrotropics_ID, function(TimeSeries_ID){
- 
-  print(TimeSeries_ID)
-  temp <- binary_converter_function(TimeSeries_ID)
-  if(class(temp)=="matrix"){
-    # remove bins within sites with fewer species than cut off
-    temp <- temp[rowSums(temp) > rich.cutoff,]
-  }
-  return(temp)
-})
-names(afrotropics_matrices) <- check$afrotropics_ID
-
-neotropics_matrices <- lapply(check$neotropics_ID, function(TimeSeries_ID){
-  
-  print(TimeSeries_ID)
-  temp <- binary_converter_function(TimeSeries_ID)
-  if(class(temp)=="matrix"){
-    # remove bins within sites with fewer species than cut off
-    temp <- temp[rowSums(temp) > rich.cutoff,]
-  }
-  return(temp)
-})
-names(neotropics_matrices) <- check$neotropics_ID
-
-australasia_matrices <- lapply(check$australasia_ID, function(TimeSeries_ID){
-  
-  print(TimeSeries_ID)
-  temp <- binary_converter_function(TimeSeries_ID)
-  if(class(temp)=="matrix"){
-    # remove bins within sites with fewer species than cut off
-    temp <- temp[rowSums(temp) > rich.cutoff,]
-  }
-  return(temp)
-})
-names(australasia_matrices) <- check$australasia_ID
-
-# This is just a placeholder, the final data list will have a different configuration
-matrix_lists <- list(palearctic_matrices, nearctic_matrices, afrotropics_matrices, neotropics_matrices, australasia_matrices)
-names(matrix_lists) <- c("palearctic_mat","nearctic_mat","afrotropics_mat","neotropics_mat", "australasia_mat")
-
-
-# Compute the novelty and add them to the master list
-palearctic_novelty <- lapply(names(matrix_lists$palearctic_mat[]), function(ID){
-  print(ID)
-  site.sp.mat <- (matrix_lists$palearctic_mat[ID])[]
-  site.sp.mat <- site.sp.mat[[ID]]
-  # This line had to be added because there was one timeseries with 0 change over 20 years....
-  if (ID == "G7555"){
-    return(NA)
-  }
-  else{
-    if(typeof(site.sp.mat) == "character"){
-    return(NA)
-  }
-    else{
-      if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {
-      
-        temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
-                             gam.max.k = -1)
-        # Remove first 5 bins
-        temp <- temp[-c(1:5),]
-        return(temp)
-      }
-      else {
-        return(NA)
-      }
+    if (names(check_list[i]) == "palearctic_ID"){
+      palearctic_mat_B <- nam
+      names(palearctic_mat_B) <- check_list$palearctic_ID
     }
-  }  
-})
-names(palearctic_novelty) <- check$palearctic_ID
-# Remove NA's
-palearctic_novelty <- palearctic_novelty[!sapply(palearctic_novelty, function(x) all(is.na(x)))]
-
-nearctic_novelty <- lapply(names(matrix_lists$nearctic_mat[]), function(ID){
-  print(ID)
-  site.sp.mat <- (matrix_lists$nearctic_mat[ID])[]
-  site.sp.mat <- site.sp.mat[[ID]]
-  if(typeof(site.sp.mat) == "character"){
-    return(NA)
+    if (names(check_list[i]) == "nearctic_ID"){
+      nearctic_mat_B <- nam
+      names(nearctic_mat_B) <- check_list$nearctic_ID
+    }
+    if (names(check_list[i]) == "afrotropics_ID"){
+      afrotropics_mat_B <- nam
+      names(afrotropics_mat_B) <- check_list$afrotropics_ID
+    }
+    if (names(check_list[i]) == "neotropics_ID"){
+      neotropics_mat_B <- nam
+      names(neotropics_mat_B) <- check_list$neotropics_ID
+    }
+    if (names(check_list[i]) == "australasia_ID"){
+      australasia_mat_B <- nam
+      names(australasia_mat_B) <- check_list$australasia_ID
+    }
+  
   }
-  else{
-    if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {
+  list_matrix <- list(palearctic_mat_B, nearctic_mat_B, afrotropics_mat_B, neotropics_mat_B, australasia_mat_B)
+  names(list_matrix) <- c("palearctic_mat_B","nearctic_mat_B","afrotropics_mat_B","neotropics_mat_B", "australasia_mat_B")
+  return(list_matrix)
+}
+
+matrix_list <- list_matrix_function(ID_list)
+
+# Calculate novelty and return output in a list
+list_novelty_function <- function(matrix_list){
+  
+  for (i in 1:length(matrix_list)) {
     
-      temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
-                               gam.max.k = -1)
-      # Remove first 5 bins
-      temp <- temp[-c(1:5),]
-      return(temp)
-    }
-    else {
-      return(NA)
-    }
-  }  
-})
-names(nearctic_novelty) <- check$nearctic_ID
-# Remove NA's
-nearctic_novelty <- nearctic_novelty[!sapply(nearctic_novelty, function(x) all(is.na(x)))]
-
-afrotropics_novelty <- lapply(names(matrix_lists$afrotropics_mat[]), function(ID){
-  print(ID)
-  site.sp.mat <- (matrix_lists$afrotropics_mat[ID])[]
-  site.sp.mat <- site.sp.mat[[ID]]
-  if(typeof(site.sp.mat) == "character"){
-    return(NA)
-  }
-  else{
-    if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {
+    nam <- lapply(names(matrix_list[[i]][]), 
+             function(ID){
+               print(ID)
+               site.sp.mat <- (matrix_list[[i]][ID])
+               site.sp.mat <- site.sp.mat[[ID]]
+               #site.sp.mat <- site.sp.mat[[ID]]
+               # This line had to be added because there was one timeseries with 0 change over 20 years....
+               if (ID == "G7555"){
+                 return(NA)
+               }
+               else{
+                 if(typeof(site.sp.mat) == "character"){
+                   return(NA)
+                 }
+                 else{
+                   if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {
+             
+                     temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
+                                       gam.max.k = -1)
+                     # Remove first 5 bins
+                     temp <- temp[-c(1:5),]
+                     return(temp)
+                   }
+                   else {
+                     return(NA)
+                   }
+                 }
+               }  
+         })
     
-      temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
-                             gam.max.k = -1)
-      # Remove first 5 bins
-      temp <- temp[-c(1:5),]
-      return(temp)
+    # Select correct data, delete NA's
+  
+    if (names(matrix_list[i]) == "palearctic_mat_B"){
+      palearctic_novelty_B <- nam
+      names(palearctic_novelty_B) <- ID_list$palearctic_ID
+      palearctic_novelty_B <- palearctic_novelty_B[!sapply(palearctic_novelty_B, function(x) all(is.na(x)))]
     }
-    else {
-      return(NA)
+    if (names(matrix_list[i]) == "nearctic_mat_B"){
+      nearctic_novelty_B <- nam
+      names(nearctic_novelty_B) <- ID_list$nearctic_ID
+      nearctic_novelty_B <- nearctic_novelty_B[!sapply(nearctic_novelty_B, function(x) all(is.na(x)))]
     }
+    if (names(matrix_list[i]) == "afrotropics_mat_B"){
+      afrotropics_novelty_B <- nam
+      names(afrotropics_novelty_B) <- ID_list$afrotropics_ID
+      afrotropics_novelty_B <- afrotropics_novelty_B[!sapply(afrotropics_novelty_B, function(x) all(is.na(x)))]
+    }
+    if (names(matrix_list[i]) == "neotropics_mat_B"){
+      neotropics_novelty_B <- nam
+      names(neotropics_novelty_B) <- ID_list$neotropics_ID
+      neotropics_novelty_B <- neotropics_novelty_B[!sapply(neotropics_novelty_B, function(x) all(is.na(x)))]
+    }
+    if (names(matrix_list[i]) == "australasia_mat_B"){
+      australasia_novelty_B <- nam
+      names(australasia_novelty_B) <- ID_list$australasia_ID
+      australasia_novelty_B <- australasia_novelty_B[!sapply(australasia_novelty_B, function(x) all(is.na(x)))]
+    }
+    
+    # Add a list of TimeSeries which will come in handy when evaluating the results.
+    
+    
   }
-})
-names(afrotropics_novelty) <- check$afrotropics_ID
-# Remove NA's
-afrotropics_novelty <- afrotropics_novelty[!sapply(afrotropics_novelty, function(x) all(is.na(x)))]
+  list_novelty <- list(palearctic_novelty_B, nearctic_novelty_B, afrotropics_novelty_B, neotropics_novelty_B, australasia_novelty_B)
+  names(list_novelty) <- c("palearctic_novelty_B","nearctic_novelty_B","afrotropics_novelty_B","neotropics_novelty_B", "australasia_novelty_B")
+  return(list_novelty)
+  
+}
 
-neotropics_novelty <- lapply(names(matrix_lists$neotropics_mat[]), function(ID){
-  print(ID)
-  site.sp.mat <- (matrix_lists$neotropics_mat[ID])[]
-  site.sp.mat <- site.sp.mat[[ID]]
-  if(typeof(site.sp.mat) == "character"){
-    return(NA)
-  }
-  else{
-    if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {
-      
-      temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
-                             gam.max.k = -1)
-      # Remove first 5 bins
-      temp <- temp[-c(1:5),]
-      return(temp)
-    }
-    else{
-      return(NA)
-    }
-  }
-})
-names(neotropics_novelty) <- check$neotropics_ID
-# Remove NA's
-neotropics_novelty <- neotropics_novelty[!sapply(neotropics_novelty, function(x) all(is.na(x)))]
+novelty_list <- list_novelty_function(matrix_list)
 
-australasia_novelty <- lapply(names(matrix_lists$australasia_mat[]), function(ID){
-  print(ID)
-  site.sp.mat <- (matrix_lists$australasia_mat[ID])[]
-  site.sp.mat <- site.sp.mat[[ID]]
-  if(typeof(site.sp.mat) == "character"){
-    return(NA)
-  }
-  else{
-    if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >= 5) {
-      temp <- identify.novel.gam(site.sp.mat = site.sp.mat, alpha = 0.05, metric = "jaccard", site = ID, plot = TRUE, plot.data = FALSE,
-                             gam.max.k = -1)
-      # Remove first 5 bins
-      temp <- temp[-c(1:5),]
-      return(temp)
-    }
-    else {
-      return(NA)
-    }
-  }
-})
-names(australasia_novelty) <- check$australasia_ID
-# Remove NA's
-australasia_novelty <- australasia_novelty[!sapply(australasia_novelty, function(x) all(is.na(x)))]
-
-
-
-
-# Creating the master list, B is for binary (presence/absence)
-
-palearctic_data <- list(palearctic_ID, palearctic_matrices, palearctic_novelty)
-names(palearctic_data) <- c("palearctic_ID", "palearctic_matrices_B", 
-                            "palearctic_novelty_B")
-
-nearctic_data <- list(nearctic_ID, nearctic_matrices, nearctic_novelty)
-names(nearctic_data) <- c("nearctic_ID", "nearctic_matrices_B", 
-                            "nearctic_novelty_B")
-
-afrotropics_data <- list(afrotropics_ID, afrotropics_matrices, afrotropics_novelty)
-names(afrotropics_data) <- c("afrotropics_ID", "afrotropics_matrices_B", 
-                          "afrotropics_novelty_B")
-
-neotropics_data <- list(neotropics_ID, neotropics_matrices, neotropics_novelty)
-names(neotropics_data) <- c("neotropics_ID", "neotropics_matrices_B", 
-                             "neotropics_novelty_B")
-
-australasia_data <- list(australasia_ID, australasia_matrices, australasia_novelty)
-names(australasia_data) <- c("australasia_ID", "australasia_matrices_B", 
-                            "australasia_novelty_B")
-
-# Here it is
-Fish_Communities <- list(palearctic_data, nearctic_data, afrotropics_data, neotropics_data, australasia_data)
-names(Fish_Communities) <- c("palearctic_data", "nearctic_data", "afrotropics_data", "neotropics_data", "australasia_data")
+# Create a final master list
+Fish_Communities_B <- list(ID_list, matrix_list, novelty_list)
+names(Fish_Communities_B) <- c("BioRealm_ID", "BioRealm_Matrices", "BioRealm_Novelty")
 
 
 
