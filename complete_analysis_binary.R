@@ -1,4 +1,7 @@
-# Recreating data structure as per Pandolfi et al so we can run our data through their model
+### Analysis of global fish communities using the Novelty detection Framework (Pandolfi et al, 2020) ###
+
+# This is the presence/absence data pathway. Remember to load in functions, which are stored in separate files.
+
 
 # Assign individual time series to BioRealm groups
 
@@ -16,7 +19,6 @@ australasia_ID <- as.list(subset(time_series_data, BioRealm == "Australasia")[,3
 
 check <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 names(check) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
-
 
 # Store the presence/absence matrices in the list according to BioRealm
 
