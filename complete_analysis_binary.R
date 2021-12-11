@@ -20,9 +20,9 @@ ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, austr
 names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
 
 # Create matrix list using this function
-list_matrix_function <- function(check_list){
+list_matrix_B_function <- function(check_list){
 
-  for (i in 1:length(ID_list)) {
+  for (i in 1:length(check_list)) {
     nam <- lapply(check_list[[i]][], 
              function(TimeSeries_ID){
                print(TimeSeries_ID)
@@ -61,7 +61,7 @@ list_matrix_function <- function(check_list){
   return(list_matrix)
 }
 
-matrix_list <- list_matrix_function(ID_list)
+matrix_list_B <- list_matrix_B_function(ID_list)
 
 # Calculate novelty and return output in a list
 list_novelty_function <- function(matrix_list){
@@ -136,11 +136,11 @@ list_novelty_function <- function(matrix_list){
   
 }
 
-novelty_list <- list_novelty_function(matrix_list)
+novelty_list_B <- list_novelty_function(matrix_list_B)
 
-# Create a final master list
-Fish_Communities_B <- list(ID_list, matrix_list, novelty_list)
-names(Fish_Communities_B) <- c("BioRealm_ID", "BioRealm_Matrices", "BioRealm_Novelty")
+# Create a final master list for Binary results
+Fish_Communities_B <- list(ID_list, matrix_list_B, novelty_list_B)
+names(Fish_Communities_B) <- c("BioRealm_ID", "BioRealm_Matrices_B", "BioRealm_Novelty_B")
 
 
 

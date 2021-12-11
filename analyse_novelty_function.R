@@ -16,7 +16,7 @@ novel.probability <- function(novelty_list){
                                                                temp <- data.frame(TimeSeries_ID = ID,
                                                                                   t(sapply(c("back", "instant", "cumul", "novel"),
                                                                                            function(y){sum(temp$cat == y)})))
-                                                               #temp$BioRealm <- c("P", "N", "A", "NEO", "AUS")[n]
+                                                               temp$taxa <- c("PAL", "NEA", "AFRO", "NEO", "AUS")[n]
                                                             
                                                                
                                                                return(temp)
@@ -24,7 +24,7 @@ novel.probability <- function(novelty_list){
                            }))
  
   
-  #novel.ts.freq$taxa <- as.factor(novel.ts.freq$taxa)
+  novel.ts.freq$taxa <- as.factor(novel.ts.freq$taxa)
   
   # We are running separate logistic regressions, rather than trying to run
   # multinomial models. This is because I think it's easier to talk about
@@ -59,4 +59,8 @@ novel.probability <- function(novelty_list){
   
 }
 
+# Use the required list summarizing novelty results as input for the analysis function
+novelty_analysis_output_A <- novel.probability(novelty_list_A)
+
+novelty_analysis_output_B <- novel.probability(novelty_list_B)
 

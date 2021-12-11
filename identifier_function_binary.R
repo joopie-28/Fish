@@ -86,24 +86,28 @@ binary_converter_function <- function(survey_identifier){
   }
   binary_df <- binary_df[, !(names(binary_df) == "quarter")]
   
-  # Arbitrarily removing duplicate surveys based on time frame
+  # Arbitrarily removing duplicate surveys based on time frame. 11-12-21 I HAVE A BETTER IDEA FOR THIS. SELECT THE ONE WITH 
+  # THE HIGHEST NUMBER OF SPECIES RATHER THAN JUST DOING IT RANDOMLY. THIS MAKES IMPROVES VALIDITY OF NOVELTY DETECTION.
   binary_df <- binary_df[!duplicated(binary_df[,c("time")]),]
   
-  # Change rown ames to bin (time)
+  # Change row names to bin (time)
   row.names(binary_df) <- (2021-as.numeric(binary_df$time))
   
   # Now remove the time column
   binary_df <- binary_df[, !(names(binary_df) == "time")]
   
-  # Very small samples will be returned as vectors rather than dataframes, so will instruct the function to skip this survey if
-  # That happens
+  # Very small samples will be returned as a string of numbers (type = double) rather than data frames, so will instruct the function to skip this survey if
+  # That happens. The timeseries is just too short basically.
   if (typeof(binary_df) == "double"){
     return("Not enough data")
   }
   
-  # Make sure the order is OK, it will influence the model results
+  # Make sure the order is OK, it will influence the model results (our priamry reference community HAS to be the oldest one for the
+  # model to make sense).
   binary_df <- binary_df[order(as.numeric(row.names(binary_df)), decreasing = FALSE),]
   
   return(binary_df)
 }
+
+
 
