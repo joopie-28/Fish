@@ -19,6 +19,7 @@ australasia_ID <- as.list(subset(time_series_data, BioRealm == "Australasia")[,3
 ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID )
 
 names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
+rm(palearctic_ID, nearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 
 # Create matrix list using this function
 
@@ -145,3 +146,4 @@ novelty_list_A <- list_novelty_function(matrix_list_A)
 # Create a final master list for abundance results
 Fish_Communities_A <- list(ID_list, matrix_list_A, novelty_list_A)
 names(Fish_Communities_A) <- c("BioRealm_ID", "BioRealm_Matrices_A", "BioRealm_Novelty_A")
+rm(matrix_list_A, novelty_list_A)

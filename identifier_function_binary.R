@@ -81,15 +81,36 @@ binary_converter_function <- function(survey_identifier){
   
   # Selecting only those that occur in the MOST CONSISTENT QUARTER, then deleting the quarter column. But only if we have enough
   # Timepoints to justify this (no point deleting them if we only have 2 or 3)
-  if (nrow(binary_df) >= 5) {
-  binary_df <- subset(binary_df, quarter == as.numeric(tail(names(sort(table(binary_df$quarter))), 1)))
-  }
+  #if (nrow(binary_df) > 5) {
+  #binary_df <- subset(binary_df, quarter == as.numeric(tail(names(sort(table(binary_df$quarter))), 1)))
+  #}
   binary_df <- binary_df[, !(names(binary_df) == "quarter")]
   
   # Arbitrarily removing duplicate surveys based on time frame. 11-12-21 I HAVE A BETTER IDEA FOR THIS. SELECT THE ONE WITH 
   # THE HIGHEST NUMBER OF SPECIES RATHER THAN JUST DOING IT RANDOMLY. THIS MAKES IMPROVES VALIDITY OF NOVELTY DETECTION.
-  binary_df <- binary_df[!duplicated(binary_df[,c("time")]),]
+  # Here we remove year duplicates. Instead of doing it randomly, we opt to keep the survey with the most species, as to prevent
+  # Oversensitivity to novelty detection.
   
+  binary_df <- binary_df[order(as.numeric((binary_df$time)), decreasing = FALSE),]
+  
+  # Ensure we filter until all rows are unique.
+  i <- 1
+    while (i < length(binary_df$time)) {
+      if (binary_df$time[i] == binary_df$time[i+1]) {
+        if (sum(binary_df[i,]) - binary_df$time[i] <= sum(binary_df[i+1,]) - binary_df$time[i + 1]){
+          binary_df <- binary_df[-i,]
+        }
+        else {
+          binary_df <- binary_df[-(i + 1),]
+        }
+        i <- i - 1
+      }
+      i <- i + 1
+    if (i == length((binary_df$time))){
+      break
+    }
+  } 
+ 
   # Change row names to bin (time)
   row.names(binary_df) <- (2021-as.numeric(binary_df$time))
   

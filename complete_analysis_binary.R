@@ -18,6 +18,7 @@ australasia_ID <- as.list(subset(time_series_data, BioRealm == "Australasia")[,3
 ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID )
 
 names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
+rm(palearctic_ID, nearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 
 # Create matrix list using this function
 list_matrix_B_function <- function(check_list){
@@ -141,6 +142,7 @@ novelty_list_B <- list_novelty_function(matrix_list_B)
 # Create a final master list for Binary results
 Fish_Communities_B <- list(ID_list, matrix_list_B, novelty_list_B)
 names(Fish_Communities_B) <- c("BioRealm_ID", "BioRealm_Matrices_B", "BioRealm_Novelty_B")
+rm(matrix_list_B, novelty_list_B)
 
 
 

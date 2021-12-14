@@ -60,7 +60,10 @@ novel.probability <- function(novelty_list){
 }
 
 # Use the required list summarizing novelty results as input for the analysis function
-novelty_analysis_output_A <- novel.probability(novelty_list_A)
+novelty_analysis_output_A <- novel.probability(Fish_Communities_A$BioRealm_Novelty_A)
 
-novelty_analysis_output_B <- novel.probability(novelty_list_B)
+novelty_analysis_output_B <- novel.probability(Fish_Communities_B$BioRealm_Novelty_B)
+
+
+
 
