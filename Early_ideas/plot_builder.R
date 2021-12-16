@@ -3,7 +3,7 @@
 # to work.
 
 # Clear workspace (if you want) and set directory to access files.
-rm(list = ls())
+rm(list = ls()) 
 setwd("YOUR OWN CHOICE HERE")
 
 # Required packages

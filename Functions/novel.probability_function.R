@@ -1,5 +1,7 @@
 ### Analyzing the novel communities using a slightly modified version of Pandolfi et Al's function. ###
 
+# This function takes in a list of novelty detection matrices and returns a summary of novelty emergence. 
+
 novel.probability <- function(novelty_list){
   
   # capture novel frequency for all taxa in list 
@@ -57,13 +59,5 @@ novel.probability <- function(novelty_list){
               fixed.prob.models = fixed.prob.models,
               random.prob.models = random.prob.models))
   
-}
-
-# Use the required list summarizing novelty results as input for the analysis function
-novelty_analysis_output_A <- novel.probability(Fish_Communities_A$BioRealm_Novelty_A)
-
-novelty_analysis_output_B <- novel.probability(Fish_Communities_B$BioRealm_Novelty_B)
-
-
-
+} 
 

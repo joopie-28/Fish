@@ -1,20 +1,5 @@
 # Identifiying Novel Communities (as per the Method of Pandolfi et al., 2020)
 
-# Clear environment (if wanted) and set your working directory
-rm(list = ls())
-setwd("YOUR OWN CHOICE HERE")
-
-# Packages
-install.packages(c("mgcv", "vegan", "lme4", "nlme", 
-                 "DHARMa", "merTools", "shape",
-                 "multcomp", "maptools", "sp", 
-                 "divDyn", "plotrix", "raster",
-                 "rgeos", "fun", "analogue",
-                 "brms"))
-# Load data
-time_series_data <- read.csv("1873_2_RivFishTIME_TimeseriesTable.csv")
-Survey_Data <- read.csv("1873_2_RivFishTIME_SurveyTable.csv")
-
 # Here, we use the two-metric approach to identify a novel community, using a freshwater fish
 # time-series as a test. Much of the code is directly taken from the 2020 publication by
 # Pandolfi et al. (Increased extinction in the emergence of novel ecological communities). We
@@ -128,7 +113,7 @@ binary_converter_function <- function(survey_identifier){
   binary_df <- binary_df[order(as.numeric(row.names(binary_df)), decreasing = FALSE),]
   
   return(binary_df)
-}
+} 
 
 
 

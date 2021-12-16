@@ -1,7 +1,7 @@
 # The ultimate metric-maker function
 
 # Clear environment (if wanted) and set your working directory
-rm(list = ls())
+rm(list = ls()) 
 setwd("YOUR OWN CHOICE HERE")
 
 # Load data

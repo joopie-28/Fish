@@ -295,3 +295,4 @@ identify.novel.gam <- function(site.sp.mat, alpha,
                             cbind(min.p, c(NA, plogis(predict(min.gam))))))
   } else {return(return.data)}
 }
+ 

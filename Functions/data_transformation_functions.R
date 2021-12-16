@@ -1,13 +1,3 @@
-# Converting abundance data into presence-absence data (binary)
-
-# Clear environment (if wanted) and set your working directory
-rm(list = ls())
-setwd("YOUR OWN CHOICE HERE")
-
-# Load data
-time_series_data <- read.csv("1873_2_RivFishTIME_TimeseriesTable.csv")
-Survey_Data <- read.csv("1873_2_RivFishTIME_SurveyTable.csv")
-
 # This function will create a dataframe with binary entries denoting species presence or absence. The #rows is equal to the #surveys
 # for a timeseries and the #columns is equal to the number of unique species in that timeseries. The function takes a timeseries ID as 
 # input (e.g. G1034) and also requires the timeseries and survey datafiles to be loaded.
@@ -41,9 +31,6 @@ binary_converter_function <- function(survey_identifier){
   return(binary_df)
 }
 
-# Test!
-test <- binary_converter_function("G10")
-test
 
 # In addition, if we do not want to go with a binary approach after all, here is a similar function which simply produces
 # a data frame with abundance. Works in a similar way but is a bit slower because it is assigning values through looping 
@@ -73,9 +60,6 @@ abundance_df_function <- function(survey_identifier){
   return(abundance_df)
 }
 
-# Test!
-test <- abundance_df_function("G1034")
-test
 
 # Finally, one last idea which might be useful down the track. Creating a data frame that shows the relative proportion of each species within
 # a community. We do not consider biomass etc here, so our metrics are solely based on number of individuals (or whatever crazy metric the fishermen used.)
@@ -118,10 +102,7 @@ proportion_df_function <- function(survey_identifier){
   }
   return(proportion_df)
 }
-
-# Test!
-b <- proportion_df_function("G1034")
-b
+ 
 
 
 
