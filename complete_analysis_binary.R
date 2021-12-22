@@ -44,13 +44,13 @@ names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropic
 rm(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 
 # Create matrix list using this function
-matrix_list_B <- list_matrix_B_function(ID_list)
+matrix_list_B_bin1 <- list_matrix_B_bins_function(ID_list, 1)
 
 # Create matrix_list with varying bin widths
 matrix_list_B_bin2 <- list_matrix_B_bins_function(ID_list, 2)
 
 # Calculate novelty and return output in a list
-novelty_list_B <- list_novelty_B_function(matrix_list_B)
+novelty_list_B <- list_novelty_B_function(matrix_list_B_bin1)
 
 novelty_list_B_bin2 <- list_novelty_B_function(matrix_list_B_bin2)
 
@@ -62,14 +62,18 @@ novelty_analysis_output_B <- novel.probability(novelty_list_B)
 novelty_analysis_output_B_bin2 <- novel.probability(novelty_list_B_bin2)
 
 # Create a final master list for Binary results
-Fish_Communities_B <- list(ID_list, matrix_list_B, matrix_list_B_bin2, novelty_list_B, novelty_list_B_bin2, novelty_analysis_output_B, novelty_analysis_output_B_bin2 )
+Fish_Communities_B <- list(ID_list, matrix_list_B_bin1, matrix_list_B_bin2, novelty_list_B, novelty_list_B_bin2, novelty_analysis_output_B, novelty_analysis_output_B_bin2 )
 names(Fish_Communities_B) <- c("BioRealm_ID", "BioRealm_Matrices_B", "BioRealm_Matrices_B_2",  "BioRealm_Novelty_B", "BioRealm_Novelty_B_2", "Analysis_Outputs_B", "Analysis_Outputs_B_2")
-rm(matrix_list_B, matrix_list_B_bin2, novelty_list_B, novelty_list_B_bin2, novelty_analysis_output_B, novelty_analysis_output_B_bin2)
+rm(matrix_list_B_bin1, matrix_list_B_bin2, novelty_list_B, novelty_list_B_bin2, novelty_analysis_output_B, novelty_analysis_output_B_bin2)
+
+saveRDS(Fish_Communities_B, "./outputs/Fish_Communities_B.rds")
+
 
 # Create a Venn plot of model results
 
 venn_plot_function(Fish_Communities_B$Analysis_Outputs_B)
 venn_plot_function(Fish_Communities_B$Analysis_Outputs_B_2)
+
 
 
 

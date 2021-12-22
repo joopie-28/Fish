@@ -18,28 +18,28 @@ list_matrix_A_bins_function <- function(check_list, bin_width){
                   }) 
     
     if (names(check_list[i]) == "palearctic_ID"){
-      palearctic_mat_B <- nam
-      names(palearctic_mat_B) <- check_list$palearctic_ID
+      palearctic_mat_A <- nam
+      names(palearctic_mat_A) <- check_list$palearctic_ID
     }
     if (names(check_list[i]) == "nearctic_ID"){
-      nearctic_mat_B <- nam
-      names(nearctic_mat_B) <- check_list$nearctic_ID
+      nearctic_mat_A <- nam
+      names(nearctic_mat_A) <- check_list$nearctic_ID
     }
     if (names(check_list[i]) == "afrotropics_ID"){
-      afrotropics_mat_B <- nam
-      names(afrotropics_mat_B) <- check_list$afrotropics_ID
+      afrotropics_mat_A <- nam
+      names(afrotropics_mat_A) <- check_list$afrotropics_ID
     }
     if (names(check_list[i]) == "neotropics_ID"){
-      neotropics_mat_B <- nam
-      names(neotropics_mat_B) <- check_list$neotropics_ID
+      neotropics_mat_A <- nam
+      names(neotropics_mat_A) <- check_list$neotropics_ID
     }
     if (names(check_list[i]) == "australasia_ID"){
-      australasia_mat_B <- nam
-      names(australasia_mat_B) <- check_list$australasia_ID
+      australasia_mat_A <- nam
+      names(australasia_mat_A) <- check_list$australasia_ID
     }
     
   }
-  list_matrix <- list(palearctic_mat_B, nearctic_mat_B, afrotropics_mat_B, neotropics_mat_B, australasia_mat_B)
-  names(list_matrix) <- c("palearctic_mat_B","nearctic_mat_B","afrotropics_mat_B","neotropics_mat_B", "australasia_mat_B")
+  list_matrix <- list(palearctic_mat_A, nearctic_mat_A, afrotropics_mat_A, neotropics_mat_A, australasia_mat_A)
+  names(list_matrix) <- c("palearctic_mat_A","nearctic_mat_A","afrotropics_mat_A","neotropics_mat_A", "australasia_mat_A")
   return(list_matrix)
 }

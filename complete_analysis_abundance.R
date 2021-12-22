@@ -39,20 +39,20 @@ neotropics_ID <- as.list(subset(time_series_data, BioRealm == "Neotropics")[,3])
 australasia_ID <- as.list(subset(time_series_data, BioRealm == "Australasia")[,3])
 
 # Create a list to hold these, serves as input for the matrix creator
-ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID )
+ID_list <- list(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 
 names(ID_list) <- c("palearctic_ID", "nearctic_ID", "afrotropics_ID", "neotropics_ID", "australasia_ID")
 rm(palearctic_ID, nearctic_ID, afrotropics_ID, neotropics_ID, australasia_ID)
 
 # Create matrix list using this function
-matrix_list_A <- list_matrix_A_function(ID_list)
+matrix_list_A_bin1 <- list_matrix_A_bins_function(ID_list, 1)
 
 # Create matrix_list with varying bin widths
-matrix_list_A_bin2 <- list_matrix_B_bins_function(ID_list, 2)
+matrix_list_A_bin2 <- list_matrix_A_bins_function(ID_list, 2)
 
 # Calculate novelty and return output in a list. No difference between Binary and Abundance data here except the similarity index used
 # (Jaccard for binary, Bray-Curtis for abundance). Just remember to use the correct matrices as input (list_A for abundance, list_B for binary).
-novelty_list_A <- list_novelty_A_function(matrix_list_A)
+novelty_list_A <- list_novelty_A_function(matrix_list_A_bin1)
 
 novelty_list_A_bin2 <- list_novelty_A_function(matrix_list_A_bin2)
 
@@ -64,15 +64,19 @@ novelty_analysis_output_A <- novel.probability(novelty_list_A)
 novelty_analysis_output_A_bin2 <- novel.probability(novelty_list_A_bin2)
 
 # Create a final master list for abundance results
-Fish_Communities_A <- list(ID_list, matrix_list_A, matrix_list_A_bin2, novelty_list_A, novelty_list_A_bin2, novelty_analysis_output_A, novelty_analysis_output_A_bin2)
+Fish_Communities_A <- list(ID_list, matrix_list_A_bin1, matrix_list_A_bin2, novelty_list_A, novelty_list_A_bin2, novelty_analysis_output_A, novelty_analysis_output_A_bin2)
 names(Fish_Communities_A) <- c("BioRealm_ID", "BioRealm_Matrices_A", "BioRealm_Matrices_A_2", "BioRealm_Novelty_A", "BioRealm_Novelty_A_2", "Analysis_outputs_A", "Analysis_outputs_A_2")
-rm(matrix_list_A, matrix_list_A_bin2, novelty_list_A, novelty_list_A_bin2, novelty_analysis_output_A, novelty_analysis_output_A_bin2)
+rm(matrix_list_A_bin1, matrix_list_A_bin2, novelty_list_A, novelty_list_A_bin2, novelty_analysis_output_A, novelty_analysis_output_A_bin2)
 
+saveRDS(Fish_Communities_A, "./outputs/Fish_Communities_A.rds")
 
 # Create a Venn plot of model results
 
+
 venn_plot_function(Fish_Communities_A$Analysis_Outputs_A)
 venn_plot_function(Fish_Communities_A$Analysis_Outputs_A_2)
+
+
 
 
 

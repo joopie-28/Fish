@@ -26,26 +26,43 @@ binary_aggregate_function <- function(survey_identifier, bin_width){
     }
   }
   
+  if (bin_width == 1){
+    if (nrow(year_unique) < 10){
+      return ("Not enough data when bin size is 1 years (less than 10 years)")
+    }
+  }
+  
   # Here I create the empty dataframe which will be populated with presence/absence values, based on the bin width
-  binary_df <- as.data.frame(matrix(data = NA, nrow = (ceiling(((max_year-min_year+1)/bin_width))), ncol = nrow(ref_list)))
+  
+  binary_df <- as.data.frame(matrix(data = NA, 
+                                    nrow = (ceiling(((max_year-min_year+1)/bin_width))), 
+                                    ncol = nrow(ref_list)))
+  
   colnames(binary_df) <- ref_list[, 1]
   
   # Select the correct years as a function of bin width
-  if (bin_width != 1){
+  
     name_list <- list()
     name_list <- seq(min_year, max_year, by = bin_width)
-    name_list <- name_list[order(as.numeric((name_list)), decreasing = FALSE)]
+    
+    name_list <- name_list[order(as.numeric((name_list)), 
+                                 decreasing = FALSE)]
+    
     rownames(binary_df) <- name_list
-  }
+  
   
   # Let's populate this data frame. I will use the column and row names to loop through a subset of the data
   # a couple times. This will essentially crosscheck if a species is present in the set or not. 
   for (i in 1:nrow(binary_df)) {
-    sub_temp <- subset(sub_series, Year >= as.numeric(rownames(binary_df)[i]) & Year < (as.numeric(row.names(binary_df)[i]) + (bin_width)))
+    sub_temp <- subset(sub_series, Year >= as.numeric(rownames(binary_df)[i]) & 
+                         Year < (as.numeric(row.names(binary_df)[i]) + (bin_width)))
+    
     for (j in 1:ncol(binary_df)) {
+      
       if (colnames(binary_df[j]) %in% sub_temp$Species){
         binary_df[i,j] <- 1
       }
+      
       else{
         binary_df[i,j] <- 0
       }
@@ -53,10 +70,11 @@ binary_aggregate_function <- function(survey_identifier, bin_width){
   }
   
   # Order dataframe so that novelty framework does not get confused
+  
   binary_df <- binary_df[order(as.numeric((row.names(binary_df))), decreasing = FALSE),]
   
   # Very small samples will be returned as a string of numbers (type = double) rather than data frames, so will instruct the function to skip this survey if
-  # That happens. The timeseries is just too short basically.
+  # That happens. 
   if (typeof(binary_df) == "double"){
     return("Not enough data")
   }

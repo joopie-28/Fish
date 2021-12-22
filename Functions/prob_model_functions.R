@@ -74,6 +74,7 @@ fixed.taxa.prob.models <- function(novel.freq.df,
   
 }
 
+
 random.taxa.prob.models <- function(novel.freq.df, 
                                     test.model=FALSE){
   
