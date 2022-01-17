@@ -11,10 +11,7 @@ list_matrix_B_bins_function <- function(check_list, bin_width){
                   function(TimeSeries_ID){
                     print(TimeSeries_ID)
                     temp <- binary_aggregate_function(TimeSeries_ID, bin_width)
-                    if(class(temp)=="matrix"){
-                      # remove bins within sites with fewer species than cut off
-                      temp <- temp[rowSums(temp) > rich.cutoff,]
-                    }
+                  
                     return(temp)
                   }) 
     
