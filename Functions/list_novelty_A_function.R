@@ -15,12 +15,13 @@ list_novelty_A_function <- function(matrix_list){
                     site.sp.mat <- site.sp.mat[[ID]]
                     #site.sp.mat <- site.sp.mat[[ID]]
                     # This line had to be added because there was one timeseries with 0 change over 20 years....
-                    if (ID == "G7555"){
+                    if (is.na(site.sp.mat)){
                       return(NA)
                     }
                     else{
                       if(typeof(site.sp.mat) == "character"){
                         return(NA)
+                        
                       }
                       else{
                         if (nrow(site.sp.mat) >= 10 & ncol(site.sp.mat) >=5) {

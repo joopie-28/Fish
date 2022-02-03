@@ -92,12 +92,12 @@ proportion_df_function <- function(survey_identifier){
     return(abundance_df)
   }
   proportion_df <- abundance_df_function(survey_identifier)
-  sum_vector <- apply(proportion_df, 1, sum)
+  sum_vector <- apply(abundance_df, 1, sum)
   
   # Loop to replace absolute counts with relative abundance
   for (i in 1:nrow(proportion_df)){
     for (j in 1:ncol(proportion_df)) {
-      proportion_df[i,j] <- round((proportion_df[i,j]/sum_vector[i]) * 100, digits = 2)
+      proportion_df[i,j] <- (proportion_df[i,j]/sum_vector[i])
     }
   }
   return(proportion_df)
