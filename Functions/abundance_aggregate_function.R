@@ -101,18 +101,20 @@ abundance_aggregate_function <- function(survey_identifier, bin_width){
   
   # We now want to convert this to relative abundance for each entry
   
-  #sum_vector <- apply(abundance_df, 1, sum)
+  sum_vector <- apply(abundance_df, 1, sum)
   
   # Loop to replace absolute counts with relative abundance
-  #for (i in 1:nrow(abundance_df)){
-   # for (j in 1:ncol(abundance_df)) {
+  for (i in 1:nrow(abundance_df)){
+    for (j in 1:ncol(abundance_df)) {
       
-    #  abundance_df[i,j] <- (abundance_df[i,j]/sum_vector[i])
-    #}
-  #}
+      abundance_df[i,j] <- (abundance_df[i,j]/sum_vector[i])
+    }
+  }
   
   return(abundance_df)
   
 }
+
+
 
 

@@ -18,7 +18,7 @@ inv.frame.builder <- function(converted_matrix_list, country){
     
     # Lets label!
     if(country == "USA"){
-      label_frame <- identify.novel.gam(Fish_Communities_A$BioRealm_Matrices_A_2$nearctic_mat_A[[ID]], 
+      label_frame <- identify.novel.gam(Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A[[ID]], 
                                         alpha = 0.05,
                                         metric = "jaccard",
                                         plot = TRUE, 
@@ -99,17 +99,17 @@ inv.frame.builder <- function(converted_matrix_list, country){
   
   list_mat_2 <- rbindlist(list_mat_2)
   
-  list_mat_2$NNC <- scale(list_mat_2$NNC, center = T, scale = T)
-  list_mat_2$NNC_increase <- scale(list_mat_2$NNC_increase, center = T, scale = T)
-  list_mat_2$NAC <- scale(list_mat_2$NAC, center = T, scale = T)
-  list_mat_2$NAC_increase <- scale(list_mat_2$NAC_increase, center = T, scale = T)
-  list_mat_2$INC <- scale(list_mat_2$INC, center = T, scale = T)
-  list_mat_2$INC_increase <- scale(list_mat_2$INC_increase, center = T, scale = T)
-  list_mat_2$bin_lag <- scale(as.numeric(list_mat_2$bin_lag, center = T, scale = T ))
-  list_mat_2$position <- scale(list_mat_2$position, center = T, scale = T)
-  list_mat_2$basin <- as.factor(list_mat_2$basin)
-  list_mat_2$site <- as.factor(list_mat_2$site)
-  list_mat_2[is.na(list_mat_2)] <- 0
+  #list_mat_2$NNC <- scale(list_mat_2$NNC, center = T, scale = T)
+  #list_mat_2$NNC_increase <- scale(list_mat_2$NNC_increase, center = T, scale = T)
+  #list_mat_2$NAC <- scale(list_mat_2$NAC, center = T, scale = T)
+  #list_mat_2$NAC_increase <- scale(list_mat_2$NAC_increase, center = T, scale = T)
+  #list_mat_2$INC <- scale(list_mat_2$INC, center = T, scale = T)
+  #list_mat_2$INC_increase <- scale(list_mat_2$INC_increase, center = T, scale = T)
+  #list_mat_2$bin_lag <- scale(as.numeric(list_mat_2$bin_lag, center = T, scale = T ))
+  #list_mat_2$position <- scale(list_mat_2$position, center = T, scale = T)
+  #list_mat_2$basin <- as.factor(list_mat_2$basin)
+  #list_mat_2$site <- as.factor(list_mat_2$site)
+  #list_mat_2[is.na(list_mat_2)] <- 0
   
   return(list_mat_2)
 }

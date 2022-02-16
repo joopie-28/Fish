@@ -13,6 +13,16 @@ usa_species$Status <- 0
 
 # 445 Species is quite a lot; lucky we can use fishbase for the majority.
 
+usa_species$Species[6] <- "Notropis buccata" # synonym
+usa_species$Species[10] <- "Moxostoma duquesnei" # spelling
+usa_species$Species[102] <- "Esox americanus" # subspecies
+usa_species$Species[138] <- "Opsopoeodus emiliae" # subspecies
+usa_species$Species[171] <- "Esox americanus" # subspecies, both are native so OK, American pickerels
+usa_species$Status[237] <- "Exotic" # Marine coral trout????
+usa_species$Species[256] <- "Hysterocarpus traskii" # Subspecies
+usa_species$Status[441] <- "Exotic" # Not recorded in USA per Fishbase 2007 but hails from Europe/Asia.
+
+
 for (i in 1:nrow(usa_species)) {
   
   print(paste0(i, " out of ", nrow(usa_species)))
@@ -23,7 +33,7 @@ for (i in 1:nrow(usa_species)) {
     
     a <- country(usa_species$Species[i],
                  server = "fishbase") %>%
-      select(matches(c("country", "Status"))) %>% filter(country == "USA") 
+      dplyr::select(matches(c("country", "Status"))) %>% filter(country == "USA") 
     
     # Tidy up
     
@@ -49,3 +59,49 @@ for (i in 1:nrow(usa_species)) {
     usa_species$Status[i] <- "Exotic"
   }
 }
+
+# Return to RIVfishtime names
+usa_species$Species[6] <- "Ericymba buccata" # synonym
+usa_species$Species[10] <- "Moxostoma duquesnii" # spelling
+usa_species$Species[102] <- "Esox americanus americanus" # subspecies
+usa_species$Species[138] <- "Opsopoeodus emiliae emiliae" # subspecies
+usa_species$Species[171] <- "Esox americanus vermiculatis" # subspecies
+usa_species$Species[256] <- "Hysterocarpus traskii traskii" # Subspecies
+
+# Save list
+
+usa_country_level <- usa_species
+rm(usa_species)
+
+
+# Because there is a difference between established non-natives and new invaders
+# I am creating a separate status list for species that not established prior to 
+# 1970. 
+
+usa_invaders <- read.csv("/Users/sassen/Desktop/usa_invaders.csv")
+usa_invaders[1,1] <- "Ctenopharyngodon idella"
+usa_invaders[2,1] <- "Hypophthalmichthys nobilis"
+usa_invaders[3,1] <- "Hypophthalmichthys molitrix"
+usa_invaders[4,1] <- "Neogobius melanostomus"
+usa_invaders[5,1] <- "Mylopharyngodon piceus"
+usa_invaders[6,1] <- "Rutilus rutilus"
+
+
+saveRDS(usa_invaders, "./Exotics_databases_countries/usa_invaders.rds")
+
+
+
+# I will now remove the species in the invader list from the complete list, 
+# as they are invaders country wide and thus in every basin.
+
+
+saveRDS(usa_country_level, "./Exotics_databases_countries/usa_country_level.rds")
+# Create a list that treats all established species as native
+usa_country_level_nn <- usa_country_level
+usa_country_level_nn["Status"] <- "Native"
+
+
+saveRDS(usa_country_level_nn, "./Exotics_databases_countries/usa_country_level_nn.rds")
+
+
+

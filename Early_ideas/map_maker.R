@@ -31,6 +31,37 @@ placeholder <- subset(time_series_data, TimeSeriesID %in% community$site)
 non_novelty_subset <- subset(placeholder, !(TimeSeriesID %in% df$TimeSeriesID))
 
 
+
+
+# Creating a dataframe with the timeseries where we found novelty
+# This is basically the set-up
+
+community_1 <- GLM_lists_B$GLM_input_B_1
+
+community_1 <- subset(community_1,  bins <50)
+
+novel_points_1 <- by(community_1$novel, INDICES = community_1$site, FUN = sum)
+
+novel_points_1 <- as.list(novel_points_1)
+
+df_1 = data.frame(matrix(vector(), length(novel_points_1), 2,
+                       dimnames=list(c(), c("TimeSeriesID", "Novelty"))),
+                stringsAsFactors=F)
+
+df_1$TimeSeriesID <- names(novel_points_1)
+df_1$Novelty <- novel_points_1
+
+df_1 <- subset(df_1, Novelty > 0)       
+
+# These are novel based on abundance A2 bins
+novelty_subset_1 <- subset(time_series_data, TimeSeriesID %in% df_1$TimeSeriesID)
+
+# These are not novel based on abundance A2 bins
+placeholder_1 <- subset(time_series_data, TimeSeriesID %in% community_1$site)
+
+non_novelty_subset_1 <- subset(placeholder_1, !(TimeSeriesID %in% df_1$TimeSeriesID))
+
+
 # Create a map with colour-coded timeseries locations!
 # There's a couple variations here
 
@@ -67,6 +98,14 @@ ggplot(placeholder, aes(x = Country)) + ylab("Number of TimeSeries") +
   scale_color_grey() + theme_classic() + labs(title = "TimeSeries country distribution (Abundance)") 
 
   
+ggplot(placeholder_1, aes(x = Country)) + ylab("Number of TimeSeries") +
+  geom_histogram(stat = "count", color = "grey", fill = "grey") + 
+  geom_histogram(data = subset(time_series_data, TimeSeriesID %in% df_1$TimeSeriesID),
+                 stat = "count", color = "gold", fill = "gold") +
+  scale_color_grey() + theme_classic() + labs(title = "TimeSeries country distribution (Abundance), bin = 1") 
+
+
+
   
 
 

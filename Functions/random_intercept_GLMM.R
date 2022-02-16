@@ -27,8 +27,8 @@ random_effects_GLMM <- function(novel.freq.df,
                                  #(years_before) +
                                   position +
                                  #(length) +
-                                 (1|site) +
-                                 (richness),
+                                 (1|site),
+                                 #(richness),
                                data=temp_df, family=binomial)
 
   # group predictions

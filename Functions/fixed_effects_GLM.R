@@ -26,8 +26,8 @@ fixed_effects_GLM <- function(novel.freq.df,
     covariate_fixed_glmm <- glm(success ~  (bin.lag) + 
                                      #(years_before) +
                                      #(length) +
-                                     (position) +
-                                     (richness),
+                                     (position),
+                                     #(richness),
                                    data=temp_df, family=binomial)
 
 

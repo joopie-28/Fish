@@ -98,8 +98,12 @@ for (i in 1:nrow(france_country_level)){
 }
 france_country_level <- na.omit(france_country_level)
 
-saveRDS(france_country_level, "./Exotics_databases_countries/france_country_level.rds")
+# Create a list that treats all established species as native
+france_country_level_nn <- france_country_level
+france_country_level_nn["Status"] <- "Native"
 
+saveRDS(france_country_level, "./Exotics_databases_countries/france_country_level.rds")
+saveRDS(france_country_level_nn, "./Exotics_databases_countries/france_country_level_nn.rds")
 
 
 

@@ -61,6 +61,12 @@ swe_species$Species[22] <- "Salvelinus alpinus alpinus"
 # No recent invaders in Sweden Time Series
 saveRDS(swe_species, "./Exotics_databases_countries/swe_country_level.rds")
 
+# Create a list that treats all established species as native
+swe_country_level_nn <- swe_country_level
+swe_country_level_nn["Status"] <- "Native"
+
+saveRDS(swe_country_level_nn, "./Exotics_databases_countries/swe_country_level_nn.rds")
+
 
 rm(swe_timeseries, swe_species, species_vector)
 

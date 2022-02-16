@@ -4,10 +4,10 @@
 status_assignment_function <- function(survey_ID, country){
   
   if(country == "USA"){
-    test_matrix <- Fish_Communities_A$BioRealm_Matrices_A_2$nearctic_mat_A[[survey_ID]]
+    test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A[[survey_ID]]
   }
   else{
-  test_matrix <- Fish_Communities_A$BioRealm_Matrices_A_2$palearctic_mat_A[[survey_ID]]
+  test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$palearctic_mat_A[[survey_ID]]
   }
   
   if (typeof(test_matrix) == "character"){
@@ -41,6 +41,21 @@ status_assignment_function <- function(survey_ID, country){
   if(country == "SWE"){
     country_level <- swe_country_level
     
+  }
+  
+  if(country == "USA"){
+    country_level <- usa_country_level
+    invaders <- usa_invaders
+  }
+  
+  if(country == "ESP"){
+    country_level <- spain_country_level
+    invaders <- spain_invaders
+  }
+  
+  if(country == "FIN"){
+    country_level <- finland_country_level
+    invaders <- finland_invaders
   }
   
 
@@ -129,6 +144,104 @@ status_assignment_function <- function(survey_ID, country){
       }
     }
   }
+  
+  colnames(test_matrix) <- species_vector$V1
+  
+  return(test_matrix)
+  
+}
+
+
+status_assignment_no_nn_function <- function(survey_ID, country){
+  
+  if(country == "USA"){
+    test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A[[survey_ID]]
+  }
+  else{
+    test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$palearctic_mat_A[[survey_ID]]
+  }
+  
+  if (typeof(test_matrix) == "character"){
+    return(NA)
+  }
+  
+  if (is.na(test_matrix)){
+    return(NA)
+  }
+  
+  # Find the basin name we are looking for
+  
+  index <- which(time_series_data$TimeSeriesID == survey_ID)
+  
+  basin_name <- time_series_data$Basin_name[index]
+  
+  invasive_status <- subset(invasives_data, 
+                            Basin %in% subset(invasives_data, 
+                                              Basin == basin_name)$Basin)
+  
+  if(country == "FRA"){
+    country_level <- france_country_level_nn
+    invaders <- france_invaders
+  }
+  
+  if(country == "GBR"){
+    country_level <- gbr_country_level_nn
+    invaders <- gbr_invaders
+  }
+  
+  if(country == "SWE"){
+    country_level <- swe_country_level_nn
+    
+  }
+  
+  if(country == "USA"){
+    country_level <- usa_country_level_nn
+    invaders <- usa_invaders
+  }
+  
+  if(country == "ESP"){
+    country_level <- spain_country_level_nn
+    invaders <- spain_invaders
+  }
+  
+  if(country == "FIN"){
+    country_level <- finland_country_level_nn
+    invaders <- finland_invaders
+  }
+  
+  
+  #  Extract species names per basin
+  species_vector <- as.data.frame(as.matrix(colnames(test_matrix)))
+  
+  # We will start with the "unestablished invaders" as this category takes
+  # priority, this is always at a country level.
+  
+  if(country != "SWE"){
+    
+    for (i in 1:nrow(species_vector)) {
+      print("Allocating invaders")
+      for (j in 1:nrow(invaders)) {
+        if (species_vector$V1[i] == invaders$Species[j]) {
+          species_vector$V1[i] <- paste0(species_vector$V1[i], ", ", invaders$Status[j], " C")
+        }
+      }  
+    }  
+  }
+    
+  # Now we have to clean up the scraps; there will be some fish that still do not have a status
+  # because tedesco did not include them in his database. We thus run the country level again.
+  for (i in 1:nrow(species_vector)) {
+    print("Reached basin level but not included by Tedesco")
+      
+    if (species_vector$V1[i] %in% country_level$Species) {
+      for (j in 1:nrow(country_level)) {
+        if (species_vector$V1[i] == country_level$Species[j]) {
+          species_vector$V1[i] <- paste0(species_vector$V1[i], ", ", country_level$Status[j], " C")
+        }
+      }  
+    }
+  }
+
   
   colnames(test_matrix) <- species_vector$V1
   

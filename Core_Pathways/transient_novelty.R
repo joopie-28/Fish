@@ -181,7 +181,7 @@ dissimilarity_comparer_function <- function(matrix,
       if (nrow(matrix) >= 10) {
         if (ncol(matrix) >=5){
 
-          label_frame <- identify.novel.gam(matrix, 
+          label_frame <- identify.novel.gam(site.sp.mat = Fish_Communities_A_ABS$BioRealm_Matrices_A_2$palearctic_mat_A$G8513, 
                                             alpha = 0.05,
                                             metric = metric,
                                             plot = TRUE, 
@@ -230,8 +230,13 @@ dissimilarity_comparer_function <- function(matrix,
       # as there is no following state.
   
     
-      pre_novelty <- (site.dist) %>% 
-        dplyr::select(starts_with("novel")-1) # This selects the community directly before
+      pre_novelty <- ((site.dist)) %>% 
+        dplyr::select(starts_with("novel")) # This selects the community directly before
+      
+      novel.dist <- site.dist %>% filter(str_detect(rownames(site.dist), "novel"))
+      
+      
+      
 
       # Control for no-novelty scenario's
       if(ncol(pre_novelty) == 0){

@@ -81,8 +81,12 @@ for (i in 1:nrow(gbr_country_level)){
 }
 gbr_country_level <- na.omit(gbr_country_level)
 
-saveRDS(gbr_country_level, "./Exotics_databases_countries/gbr_country_level.rds")
+# Create a list that treats all established species as native
+gbr_country_level_nn <- gbr_country_level
+gbr_country_level_nn["Status"] <- "Native"
 
+saveRDS(gbr_country_level, "./Exotics_databases_countries/gbr_country_level.rds")
+saveRDS(gbr_country_level_nn, "./Exotics_databases_countries/gbr_country_level_nn.rds")
 
 
 

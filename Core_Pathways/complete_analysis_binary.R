@@ -147,15 +147,36 @@ rm(GLM_input_B_1, GLM_input_B_2)
 saveRDS(GLM_lists_B, "./outputs/GLM_lists_B.rds")
 
 
+transition_data_A_1 <- estimate.observed.expected(prob.model.list = Fish_Communities_A$Analysis_outputs_A, 
+                                                  novel.list = Fish_Communities_A$BioRealm_Novelty_A, 
+                                                  dist.draws = 1e6)
+transition_data_A_2 <- estimate.observed.expected(prob.model.list = Fish_Communities_A$Analysis_outputs_A_2, 
+                                                  novel.list = Fish_Communities_A$BioRealm_Novelty_A_2, 
+                                                  dist.draws = 1e6)
 
 
 
+figure2.plot(trans.df = transition_data_A_2,
+             plot.name = "test",
+             ylims = log(c(0.1,15)))
 
 
 
+# Simon doodles
+
+matrix_simon <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A$G1040
+matrix_simon$Category <- "Back"
+matrix_simon$Category[8] <- "Cumul"
+
+simon_matrix_2 <- Fish_Communities_A$BioRealm_Matrices_A_2$nearctic_mat_A$G1040
+simon_matrix_2$Category <- "Back"
+simon_matrix_2$Category[8] <- "Novel"
 
 
+matrix_simon_3 <- Fish_Communities_B$BioRealm_Matrices_B_2$nearctic_mat_B$G1040
 
+matrix_simon_3$Category <- "Back"
+matrix_simon_3$Category[7] <- "Cumul"
 
 
 
