@@ -26,12 +26,11 @@ install.packages(c("mgcv", "vegan", "lme4", "nlme",
                    "rgeos", "fun", "analogue",
                    "brms", "data.table"))
 
-# Load data
+# Load data from RivFishTime
 time_series_data <- read.csv("1873_2_RivFishTIME_TimeseriesTable.csv")
 Survey_Data <- read.csv("1873_2_RivFishTIME_SurveyTable.csv")
 
-# Assign individual time series to BioRealm groups (if you have attempted to do the analysis using the presence/absence pathway
-# earlier, this data will be loaded in already).
+# Assign individual time series to BioRealm groups.
 
 palearctic_ID <- as.list(subset(time_series_data, BioRealm == "Palearctic")[,3])
 
@@ -65,7 +64,7 @@ rm(palearctic_ID,
 # Create matrix list of varying bin widths using this function
 
 matrix_list_A_bin1 <- list_matrix_A_bins_function(ID_list, 
-                                                  bin_width =  1)
+                                                  bin_width = 1)
 
 matrix_list_A_bin2 <- list_matrix_A_bins_function(ID_list, 
                                                   bin_width = 2)
@@ -132,7 +131,7 @@ names(GLM_lists_A) <- c("GLM_input_A_1",
                          "GLM_input_A_2")
 
 # I have constructed two models to estimate probabilities whilst 
-# taking into account covariate effects. The first model is a
+# taking into account artefact (bin lag, length) effects. The first model is a
 # random intercept GLMM, treating site (timeseries_ID) as a random
 # intercept. The second model excludes this random intercept as 
 # in reality it did not explain any variance.
@@ -148,7 +147,19 @@ GLM_lists_A$GLM_output_Fixed_A_2 <- fixed_effects_GLM(GLM_lists_A$GLM_input_A_2,
 # Tidy up the environment
 rm(GLM_input_A_1, GLM_input_A_2)
 
+# Save data file 
 saveRDS(GLM_lists_A, "./outputs/GLM_lists_A.rds")
+
+
+
+#### End of Novelty Detection
+
+
+
+
+
+
+
 
 
 
@@ -164,8 +175,7 @@ transition_data_B_2 <- estimate.observed.expected(prob.model.list = Fish_Communi
 
 
 
-
-figure2.plot(trans.df = transition_data_A_1,
+figure2.plot(trans.df = transition_data_A_2,
              plot.name = "test",
              ylims = log(c(0.1,15)))
 

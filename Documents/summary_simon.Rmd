@@ -1,0 +1,215 @@
+---
+title: "Detecting the Emergence of Novel Fish Communities"
+
+output: pdf_document
+
+header-includes:
+ \usepackage{float}
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE, warning = FALSE, fig.pos = "H")
+
+```
+
+## 1. Novelty Detection Framework
+
+The novelty detection framework by Pandolfi et al uses two signals of compositional change to identify novel communities in time series data. These two metrics are: 1) Sequential dissimilarity, defined as composition dissimilarity between time T and T-1 and 2) Minimum dissimilarity, defined as the smallest dissimilarity between time T and any time before T. The mean dissimilarities for both metrics are modeled using GAM's, which allow for flexible expectations of compositional change over time, within one particular time series. Beta regression is then used to establish a distribution around each bin (which represents a point in time). Instantaneous and cumulative dissimilarity values that exceed the arbitrary 95% predictive boundary are categorized as instantaneous and cumulative novelty respectively. Bins/communities that exhibit both cumulative and instantaneous novelty are termed truly novel (*bin and community are used interchangeably here, as a bin represents the community state at a certain time within the time series*). 
+
+```{r framework plots, eval=T, include=T, echo=FALSE, fig.align='center', fig.width= 7, fig.cap="Example of the novelty detection framework applied to a time series. This particular time series shows the emergence of a novel state which persists for the remainder of the time series (as dissimilarities remain low following the novel state)."}
+
+a <- identify.novel.gam(Fish_Communities_A$BioRealm_Matrices_A_2$palearctic_mat_A$G7602, 
+                   alpha = 0.05, metric = "bray", site = "G7602", plot = TRUE, plot.data = FALSE,
+                   gam.max.k = -1)
+```
+
+## 2. Application of Framework
+
+### 2.1. Available data
+We tested the framework on the RIVFishTime dataset, which consists of 11,386 time series of freshwater fish communities around the world. Sampling events were highly variable between time series; a large number of these time series could not be used. In order to qualify for the detection framework, a time series had to have 1) more than 10 unique time points and 2) more than 5 unique species. This left the following geographical distribution of time series:
+
+```{r distribution, eval=T, include=T, echo=FALSE, fig.align="center", fig.show="hold", out.width="45%", fig.cap="Geographical distribtuion of time series. Left is 1 year bins and right is 2 year bins. Gold denotes number of timeseries where novelty was detected."}
+
+ggplot(placeholder_1, aes(x = Country)) + ylab("Number of TimeSeries") +
+  geom_histogram(stat = "count", color = "grey", fill = "grey") + 
+  geom_histogram(data = subset(time_series_data, TimeSeriesID %in% df_1$TimeSeriesID),
+                 stat = "count", color = "gold", fill = "gold") +
+  scale_color_grey() + theme_classic()  
+
+
+ggplot(placeholder, aes(x = Country)) + ylab("Number of TimeSeries") +
+  geom_histogram(stat = "count", color = "grey", fill = "grey") + 
+    geom_histogram(data = subset(time_series_data, TimeSeriesID %in% df$TimeSeriesID),
+                 stat = "count", color = "gold", fill = "gold") +
+  scale_color_grey() + theme_classic() 
+
+```
+
+The framework was applied to both presence/absence and abundance data, using the Jaccard and Bray-Curtis indexes to calculate dissimilarity scores, respectively. Raw observational data were transformed into community matrices, with rows representing the time point/bin/community and columns representing the species. An example of such a matrix is shown below. 
+
+The quantity of data constrained our possible bin widths. There were three options:
+
+  1. "Julian days" bin width. A variable bin width which essentially treated every survey in the time series as a unique time point. If there were 4 surveys in year 1 and 3 in year 2, that would amount to 7 time points. This increases the amount of usable data but is far more vulnerable to 'false-positive' novelty due to seasonal dynamics as well as population dynamics that operate over timescales longer than 1-2 years.  
+  
+  2. 1-year bin width. Abundance data from all the time points within a year are averaged. Usage of this bin corrects for seasonal dynamics but remains vulnerable to false positives i.e. brief population anomalies which are not indicative of systemic change. 
+     
+  3. 2-year bin width. Works the same as a 1-year bin but decreases usable data due to increased data requirements. Likely less vulnerable to false positives.
+
+### 2.1. Results
+
+We examined the rates of novelty using bin widths of 1 and 2 years. The tables below show the percentage of total communities that were identified as one of the three novel states. We identified two design attributes that could skew novelty estimates: 1) Bin Lag, the time gap between bin T and bin T + 1. Time series sometimes featured large, irregular gaps between sampling which could possibly inflate novelty rates, as there is more time for communities to accumulate change. 2) Bin position, which is a measure of how many bins have preceded the current one. The possible affect of this attribute is less intuitive, but may involve a higher chance of detecting novelty early in the time series, when there are less reference communities. Many time series are of varying lengths, and thus the position variable controls for increased/decreased novelty in bins with far more/far less reference bins.
+
+```{r main_novelty_tables, eval=T, include= T, echo=FALSE}
+
+knitr::kable(GLM_lists_A$GLM_output_Fixed_A_2$novel$pred_df, caption = "Novelty estimates over the entire dataset using absolute abundance data and bin size = 2 (estimates on logit scale)")
+
+knitr::kable(GLM_lists_B$GLM_output_Fixed_B_2$novel$pred_df, caption = "Novelty estimates over the entire dataset using binary data and bin size = 2 (estimates on logit scale)")
+
+```
+
+Using a 2-year bin, we found the rate of novelty emergence across the RIVFishTime data set to be approximately ~1.3% for abundance data and ~ 0.7% for presence-absence data, after controlling for time series artefacts. 
+
+
+### 2.2. Potential Issues and Transition modelling
+
+One of the main questions is whether or not truly novel communities can be identified at a decadal timescale, by a framework that has thus far only been tested on paleoecological data sets that run for millions of years. Immediate issues that come to mind are: 
+  
+  1. Erroneous classification of a community as novel due to regular population dynamics that run over timescales of multiple years.
+  
+  2. Inability to detect novelty due to slow generation times of certain freshwater species; thus true change goes undetected.
+  
+A key question was how persistent novelty was in our data. We theorized that the biggest problem in using these data to detect novelty would be the false-positives issue; sudden bursts or decreases in the populations of certain species might elevate dissimilarity above the threshold. In such cases, the novel state would be followed by an instantaneous novel state, signifying a rapid shift back to the type of community observed prior. Abundance data is more sensitive to these types of events than presence/absence data.
+
+These anomalous events are likely to be perceived as novel by the framework. Such anomalous novel events are often  characterized by a "Novel -> Instantaneous Novelty" transition, which signifies a transition from a novel state to one that is markedly different from the novel state, but closer to the states that came before. We calculated the effect sizes between the observed and expected transitions found in our data, for varying bin widths and data types. This will indicate which data minimizes the ecological anomalies. However, it must be noted that an N -> I transition does not always mean that the novel state is an artefact. Pandolfi et Al. found a N -> I transition probability that was 10 times higher than expected in their data. It is tempting to say that if Novelty does not persist for more than a year (or some arbitrary time frame), it is not 'true novelty'. In contrast, one could also argue that novel states are inherently unstable, and more often than not, they fail to persist. This does not negate the fact that there *was* a temporary shift in community structure. Nevertheless, such changes should be distinct from novelty caused by *recurrent* population fluctuations such as those associated with spawning seasons; making these distinctions in a way that is not overly arbitrary is challenging.
+
+```{r transition_plots, eval=T, include=T, echo=FALSE, fig.align='center',fig.show="hold", out.width="45%", fig.cap="Observed vs. expected transition probabilities for abundance data. Left) Bin size = 1, Right) Bin size = 2"}
+figure2.plot(trans.df = transition_data_A_1,
+             plot.name = "test",
+             ylims = log(c(0.1,15)))
+
+figure2.plot(trans.df = transition_data_A_2,
+             plot.name = "test",
+             ylims = log(c(0.1,15)))
+```
+
+Observed N -> I transitions are approximately 7 and 5 times as high for abundance data using bin widths of 1 and 2, respectively. It is thus likely that the decrease in this particular transition when using 2-year bins is due to the removal of some population spikes (or lows). Abundances in these bins are average abundances of all surveys within that time frame, so the effect of temporary/seasonal extremes is decreased. Furthermore, there is no difference between bin widths when considering the C -> I transition. The cumulative state denotes a state significantly different from previous states, so the fact that this transition is observed 5 times more than expected might be another indicator of the tendency of novel configurations to be short-lived.
+
+## 3. Analysis of potential drivers of Novelty
+
+Now that we have established the ability of the framework to detect novelty on ecological timescales and identified potential limitations to the method, we can investigate what exactly is driving these novel communities. From the literature, contemporary novel communities are mostly caused by human-mediated exotic invasions, distribution shifts of species tracking climactic niches, and human modification of the environment (i.e. pollution, construction, obstruction etc.). The fact that novel communities are rare in this data set (~1.4 %) means that finding significant associations between novelty and community characteristics might be difficult, especially when considering the possible noise from novel communities that are in fact short term population fluctuations.
+
+### 3.1 Contribution of invasives
+
+As mentioned, exotic invasions are a likely driver of novel community emergence. We investigated this association as follows:
+
+  1. On a country level, assigned each fish species one of two categories, "Native" or "Invader". "Natives"         were those species native to the country as well as invasive species that have become established prior to
+     1970 (the year in which most time series begin). "Invaders" are those species that are non-native to the       country and became established there after 1970. We have chosen for these categories due to the novelty        framework detecting novelty from a baseline (which is mostly around 1970). Thus, in quantifying the            'effects of invaders', we need to take this perspective that the base community is 1970, and only new          (exotic) species that invade after that arbitrary baseline are true invaders.
+     
+  2. Computed the absolute change in abundance of the two categories between each bin in a time                     series, over all time series.
+  
+  3. Fitted a Binomial GLMM with Logit Link function. This model includes two covariates: Bin Lag and Bin           Position, as well as three predictors: Natives Relative Abundance Increase, Invaders Relative Abundance        Increase and an interaction. Basin within country was set as a random effect. All fixed effects were scaled. We tested the model on both abundance and binary data to investigate how this would influence results. It is likely that the binary data will be too conservative for this model. 
+
+```{r invasive species number, eval=TRUE, echo=FALSE, include=TRUE, fig.dim= c(4,2), fig.cap="Bar plot showing the number of unique species (green) and the number of unique invaders (red)."}
+
+ggplot(totals_inv) +
+  geom_bar(aes(x = Country, y = totals), stat = "identity", colour = "green", fill = "green") +
+  scale_color_grey() + theme_classic() +
+  geom_bar(aes(x = Country, y = Invaders), stat = "identity", colour = "red", fill = "red") + 
+  ylab("Unique species")
+
+
+```
+
+### 3.1.1 Potential Issues
+
+There is substantial variation between countries when it comes to the role of invaders. Sweden and Finland have experienced less exotic invasion than countries like France and the USA since 1970. In fact, the usable data from Finland and Sweden include no observations of any post 1970's invaders. Aggregating all these data into one large frame might obscure some associations. 
+
+### 3.1.2 Results 
+
+I have applied the following model to scaled, absolute abundance data. Binary data was insufficient to draw conclusions from and relative abundance data with just two species categories is also problematic (one goes up, the other goes down). Therefore, the use of absolute abundance data (which is more sensitive to temporary population spikes) seems justified.
+
+```{r formulas, eval=FALSE}
+
+glmer(novelty_category ~ bin_lag + position + NAC_increase*INC_increase+ (1|country/basin))
+
+```
+
+  
+  
+\newpage
+  
+  
+
+```{r models, eval= TRUE, include=TRUE, echo=FALSE}
+
+knitr::kable(summary(novel_model_ABS)$coefficient, caption = "GLMM output estimating effect on **True Novelty**")
+knitr::kable(summary(instant_model_ABS)$coefficient, caption = "GLMM output estimating effect on **Instantaneous Novelty**")
+knitr::kable(summary(cumul_model_ABS)$coefficient, caption = "GLMM output estimating effect on **Cumulative Novelty**")
+
+
+
+```
+
+There is evidence for an association between invaders and novelty, which is in itself not unremarkable, considering the number of invaders as a percentage of total species is quite low. This suggests that these invading species are at least partially associated with novelty emergence. The role of invaders is strongest in the model predicting true novelty. The slope estimate for the increase in invaders is consistently positive and higher than the estimate for native change for all models. The interaction between native and invader change is only significant in the true novelty model, but consistently negative throughout.
+
+
+```{r estimate figures, eval=T, include=T, echo=FALSE, fig.show="hold", out.width="33%", fig.cap="Effect of Invader population fluctuations on the emergence of novelty."}
+
+
+ggplot(df_novel, aes(x, predicted)) +
+  geom_line(color = "gold", lwd = 1) +
+  geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "orange") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        axis.line = element_line("black"), panel.border = element_blank()) + 
+          labs(y = "True Novel State (%)", x = "Invader Relative Abundance Change (scaled)") + 
+  ylim(c(0:1))
+  
+ggplot(df_instant, aes(x, predicted)) +
+  geom_line(color = "red1", lwd = 1) +
+  geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "red") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        axis.line = element_line("black"), panel.border = element_blank()) + 
+  labs(y = "Instantaneous Novel State (%)", x = "Invader Relative Abundance Change (scaled)") + 
+  ylim(c(0:1)) 
+
+ggplot(df_cumul, aes(x, predicted)) +
+  geom_line(color = "steelblue4", lwd = 1) +
+  geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "skyblue") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        axis.line = element_line("black"), panel.border = element_blank()) + 
+  labs(y = "Cumulative Novel State (%)", x = "Invader Relative Abundance Change (scaled)") + 
+  ylim(c(0:1)) 
+
+
+
+```
+
+
+## Appendix
+### A.1. Example timeseries
+
+I have included an example of a (partial) times which shows how different data types can change novelty estimates.
+```{r example matrix 1, eval=T, include=T, echo=FALSE}
+
+knitr::kable(matrix_simon[c(6:nrow(matrix_simon)),c(62:66, 80)], caption = "Example timeseries containing a sudden increase in *H. molitrix* which is known to form massive schools around mating seasons. Data is average absolute abundance")
+
+knitr::kable(simon_matrix_2[c(6:nrow(simon_matrix_2)),c(62:66, 80)], caption = "Example timeseries containing a sudden increase in *H. molitrix* which is known to form massive schools around mating seasons. Data is relative abundance")
+
+knitr::kable(matrix_simon_3[c(6:nrow(matrix_simon_3)),c(62:66, 80)], caption = "Example timeseries containing a sudden increase in *H. molitrix* which is known to form massive schools around mating seasons. Data is presence absence")
+
+
+```
+From these examples time series, two things become apparent: Single species fluctuations associated with seasonal behavior (or the fact that the person doing the survey happened to stumble upon a large school by chance) have the potential to skew results. All of these matrices are from the same time series. Use of relative abundance data 'standardizes' the magnitude of a change to a value between 0 and 1, whilst preserving the ability to pick up on systemic changes in abundance, which is not possible using presence/absence data. In fact, presence/absence data completely ignores the big fluctuation in bin 14, and instead picks up on a cumulative change in bin 16 (*note, not all rows are shown*). All data types have their pro's and con's. Relative abundance and presence/absence data are more conservative and likely reduce the number of false-positives, but in doing so also largely ignore the strength of an absolute decrease/increase in population, which hinder modeling of the true effects of potential drivers.
+
+
+
+
+
+
+
+
+

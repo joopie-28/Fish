@@ -1,0 +1,53 @@
+---
+title: "Summary 11/03/2021"
+output: pdf_document
+indent: FALSE
+
+header-includes:
+ \usepackage{float}
+
+abstract: "Human-induced environmental changes are reshuffling ecological communities globally, leading to the emergence of Novel Communities. Detection of these communities has long relied on qualitative criteria, but these have been heavily criticized for various reasons. Furthermore, most case-studies of contemporary novel communities investigate those communities which have entered a **persistent**, novel state. In contrast, little work has been done on the emergence and persistence of novel communities in the recent past, presumably due to a lack of an unbiased, quantitative method of identification. Moreover, those efforts largely focus on marine or terrestrial systems. Here, we utilize a recently published quantitative framework to identify novel communities of freshwater fishes in a global database of 11,386 time series spanning 50 years. Freshwater systems are hypothesized to be at heightened risk of ecological reshuffling, due to their susceptibility to temperature change, hydrological modifications, and exotic invasions. We (i) estimate rates of novelty emergence in freshwater fish communities, (ii) persistence of these novel states over the years, and (iii) characterize the role of exotic invaders on the emergence and persistence of ecological novelty. We found that ~ 1.6% of communities transitioned into a novel state during the period 1970-2019. Of these novel communities, 50% would persist for less than 2 years before returning to a pre-novel state, whilst 30% never returned to a pre-novel state, but rather transitioned into a new novel state within 10 years. The remaining 20% remained in their novel configuration for the remainder of the time series. Exotic invasions were a strong predictor of novelty, though this effect was country dependent. This loans credence to the notion that novel communities do not always require an exotic component and may instead emerge due to shifting ranges of native species. However, novel communities with a significant proportion of exotic invaders tended to persist for longer than those that lacked exotic invaders. We have shown that the persistence of novelty in freshwater systems is variable and might be dependent on the initial drivers of emergence. Future work should focus on the actual ecological interactions between species, as well as abiotic factors, that might influence persistence of novel communities, with the goal of informing management decisions."
+
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE, warning = FALSE, fig.pos = "H")
+
+```
+
+
+## 1. The story so far
+
+**What has been done:**
+
++ Estimated rate of novelty emergence in freshwater fish populations from 2563 time series spanning four BioRealms. 
+
++ Investigated relationship between observed and expected transitions between different community categories.
+
++ Identified invasive status of Fish species per country, and per hydrobasin where feasible.
+
++ Investigated the relationship between invader prominence and novelty emergence.
+
+**Questions we are currently working on:**
+
++ How long do novelty communities persist after emergence?
+
++ How to differentiate between 'normal' ecological noise and true novelty (which is an issue with a yearly time frame)?
+
++ Are there certain ecological signals that are associated with the length of novelty persistence (i.e. novel communities with a high degree of invasive species are less stable, novel communities with less species are more stable etc..)?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
