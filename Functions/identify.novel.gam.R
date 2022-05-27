@@ -1,8 +1,8 @@
-# The original function by Pandolfi et al (2020), which will return a matrix containing classifications for each community (i.e. timestep)
+# Identify novel communtities
 
-identify.novel.gam <- function(site.sp.mat, alpha,
-                               metric, site, plot=TRUE, plot.data=FALSE,
-                               gam.max.k = -1){
+identify.novel.gam<-function(site.sp.mat, alpha, 
+                             metric, site, plot=TRUE, plot.data=FALSE,
+                             gam.max.k = -1){
   
   require(vegan) # community disimilarity metrics
   require(mgcv) # additive modelling
@@ -295,4 +295,3 @@ identify.novel.gam <- function(site.sp.mat, alpha,
                             cbind(min.p, c(NA, plogis(predict(min.gam))))))
   } else {return(return.data)}
 }
- 

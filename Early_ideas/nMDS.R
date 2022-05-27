@@ -114,7 +114,7 @@ plot(NMDS, type = "n")
 
 points(x = NMDS$points[,"MDS1"], 
        y = NMDS$points[, "MDS2"], 
-       col = france_frame$colours,
+       col = matrix$colour,
        pch = 16,
        cex = 1.1)
 

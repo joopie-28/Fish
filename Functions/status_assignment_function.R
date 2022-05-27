@@ -152,13 +152,33 @@ status_assignment_function <- function(survey_ID, country){
 }
 
 
-status_assignment_no_nn_function <- function(survey_ID, country){
+status_assignment_no_nn_function <- function(survey_ID){
   
-  if(country == "USA"){
-    test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A[[survey_ID]]
+  # Identify the country
+  country <- names(full.ID.list[match(survey_ID, full.ID.list)])
+  
+  # Create the matrix (multiple countries possible)
+  test_matrix <- Fish_Communities_A$BioRealm_Matrices_A$palearctic_mat_A[[survey_ID]]
+  
+  if(is.null(test_matrix)){
+    
+    test_matrix <- Fish_Communities_A$BioRealm_Matrices_A$nearctic_mat_A[[survey_ID]]
+    
   }
-  else{
-    test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$palearctic_mat_A[[survey_ID]]
+  if(is.null(test_matrix)){
+    
+    test_matrix <- Fish_Communities_A$BioRealm_Matrices_A$afrotropics_mat_A[[survey_ID]]
+    
+  }
+  if(is.null(test_matrix)){
+    
+    test_matrix <- Fish_Communities_A$BioRealm_Matrices_A$neotropics_mat_A[[survey_ID]]
+    
+  }
+  if(is.null(test_matrix)){
+    
+    test_matrix <- Fish_Communities_A$BioRealm_Matrices_A$australasia_mat_A[[survey_ID]]
+    
   }
   
   if (typeof(test_matrix) == "character"){
@@ -191,7 +211,6 @@ status_assignment_no_nn_function <- function(survey_ID, country){
   
   if(country == "SWE"){
     country_level <- swe_country_level_nn
-    
   }
   
   if(country == "USA"){
@@ -204,24 +223,67 @@ status_assignment_no_nn_function <- function(survey_ID, country){
     invaders <- spain_invaders
   }
   
+  # PLACEHOLDER WHILE NATIVE SPECIES LIST NOT AVAILABLE FOR SOME COUNTRIES
   if(country == "FIN"){
     country_level <- finland_country_level_nn
     invaders <- finland_invaders
+  } 
+  
+  if(country == "AUS"){
+    country_level <- aus_country_level_nn
+    invaders <- aus_invaders
+  } 
+  
+  if(country == "JPN"){
+    country_level <- jap_country_level_nn
+    
+  } 
+  
+  if(country == "CAN"){
+    country_level <- canada_country_level_nn
+    invaders <- canada_invaders
+  } 
+  
+  if(country == "HUN"){
+    country_level <- hun_country_level_nn
+    invaders <- hun_invaders
   }
   
+  if(country == "BEL"){
+    country_level <- bel_country_level_nn
+    invaders <- bel_invaders
+  } 
   
+  if(country == "BWA"){
+    country_level <- bwa_country_level_nn
+  } 
+  
+  if(country == "CIV"){
+    country_level <- civ_country_level_nn
+    invaders <- civ_invaders
+  }
+  
+  if(country == "COL"){
+    country_level <- col_country_level_nn
+  } 
+  
+  if(country == "BRA"){
+    country_level <- bra_country_level_nn
+    invaders <- bra_invaders
+  } 
+
   #  Extract species names per basin
   species_vector <- as.data.frame(as.matrix(colnames(test_matrix)))
   
   # We will start with the "unestablished invaders" as this category takes
   # priority, this is always at a country level.
   
-  if(country != "SWE"){
+  if(country != "SWE" & country != "JPN" & country != "BWA" & country != "COL"){
     
     for (i in 1:nrow(species_vector)) {
       print("Allocating invaders")
       for (j in 1:nrow(invaders)) {
-        if (species_vector$V1[i] == invaders$Species[j]) {
+        if (species_vector$V1[i] == invaders$Species[j] | species_vector$V1[i] == "Neogobius melanostomus") {
           species_vector$V1[i] <- paste0(species_vector$V1[i], ", ", invaders$Status[j], " C")
         }
       }  
@@ -244,7 +306,11 @@ status_assignment_no_nn_function <- function(survey_ID, country){
 
   
   colnames(test_matrix) <- species_vector$V1
+  country_level <- NULL
+  invaders <- NULL
   
   return(test_matrix)
   
 }
+
+

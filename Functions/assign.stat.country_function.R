@@ -28,16 +28,17 @@ assign.stat.country_nn <- function(country_list, country){
                    function(TimeSeries_ID){
                      print((TimeSeries_ID))
                      
-                     temp <- status_assignment_no_nn_function(TimeSeries_ID, country)
+                     temp <- status_assignment_no_nn_function(TimeSeries_ID)
                      
                      return(temp)
                    })
   
   for (i in 1:length(output)) {
     print(i)
-    names(output)[i] <- country_list[[i]]
+    names(output)[i] <- paste0(country_list[[i]],"-",names(country_list[i]))
   }
   
   return(output)
   
 }
+
