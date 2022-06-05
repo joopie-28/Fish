@@ -29,6 +29,15 @@ invader.models <- lapply(cat.var, function(cat.1){
   # Add coefficients to output to make inspection easier
   mod.1 <- list("model" = mod, "summary" = as.data.frame(summary(mod)$coef))
   
+  
+  # Write a csv file for later use.
+  
+  write.csv(as.data.frame(summary(mod)$coef), paste0("./outputs/", 
+                             cat.1, "_invasion_glmm.csv"))
+  
+  
+  
+  
   return(mod.1)
   
 })
@@ -37,9 +46,14 @@ names(invader.models) <- cat.var
 
 if(plot){
   
+  pdf(file = paste0("./Plots/invader_models.pdf"),
+      width = 10,
+      height = 5)
   # if true, model plots for the invader effect are returned.
   model.plotter.6(invader.models, points = F)
+  dev.off()
 }
+
 
 return(invader.models)
 }

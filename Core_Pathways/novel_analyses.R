@@ -21,10 +21,10 @@ rm(list = ls())
 sapply(list.files("./Functions", pattern="\\.R", full.names=TRUE), 
        source)
 
-
 # Load all the exotic species databases (constructed manually from literature)
 exotic.list <- sapply(list.files("./Exotics_databases_countries", pattern="\\.rds", full.names=TRUE), 
              readRDS)
+
 # Assign appropriate names for all the files (41...)
 for (i in 1:length(exotic.list)){
   
@@ -40,8 +40,6 @@ for (i in 1:length(exotic.list)){
   rm(object, name, split.1,split.2)
 }
 rm(exotic.list)
-
-
 
 # Load required packages
 package.loader(c("rgdal", "raster", "rgeos", "sf", 
@@ -69,8 +67,6 @@ colnames(basin_data) <- c("Basin", "Country", "BioRealm", "Endorheic", "Lon", "L
 occurence_shapefile <- read_sf(dsn = "./inputs/datatoFigshare/Basin042017_3119.shp") # Tedesco et AL. Shapefile
 
 
-
-
 # Tidy Species names to prevent errors
 
 invasives_data$Species <- gsub(invasives_data$Species, 
@@ -86,7 +82,7 @@ invasives_data$Valid_name <- gsub(invasives_data$Valid_name,
 ## NOTE: We are likely to not assign on basin level as basin level data is 
 ## not uniformly available.
 
-# This function generates a dataframe matching a HydroBasin code to
+# This function generates a data frame matching a HydroBasin code to
 # the name used in Tedesco et Al. This allows for tagging species
 # on the basin level.
 
@@ -111,22 +107,6 @@ for (i in 1:nrow(time_series_data)) {
 #### Step 1. Tagging species status  #############
 ##################################################
 
-# Here, we will use a combination of the Tedesco et Al.
-# database and our own custom species tags. 
-
-# First we create a list of TimeSeries for all the countries we're 
-# interested in.
-
-country_list_assigner <- function(country){
-
-  country.lower <- tolower(country)
-
-  a <- as.list(subset(time_series_data, Country == country)$TimeSeriesID)
-  names(a) <- rep(subset(time_series_data, Country == country)$Country[1], times = length(a))
-
-  return(a)
-}
-  
 # These are the countries with sufficient data for bin range = 1 year, skipping countries with
 # no usable time series saves us some time.
 
@@ -141,8 +121,8 @@ full.ID.list <- do.call(c, lapply(countries.suf.data, function(country){
   return(test)
 }))
 
-# Using alternate method (no-non-natives, only invaders and natives)
-# Species will be tagged and a list of matrices is returned.
+# This function takes in all species abundance matrices, and tags each
+# species featured in those matrices as a native or an invader.
 
 full.stat.matrices <- assign.stat.country_nn(full.ID.list) 
 
@@ -150,7 +130,7 @@ full.stat.matrices <- assign.stat.country_nn(full.ID.list)
 #### Step 2. Computing invasive turnover metrics  #############
 ###############################################################
 
-# Compute contribution of natives and invasives 
+# Computes certain ecological metrics of invaders and natives
 
 full.nnc.matrices <- mat.nnc.ass(full.stat.matrices)
 
@@ -158,7 +138,8 @@ full.nnc.matrices <- mat.nnc.ass(full.stat.matrices)
 #### Step 3. Building a frame containing community metrics ####
 ###############################################################
 
-# This function creates a data frame for modelling 
+# This function creates a all-encompassing data frame f
+# suitable for use in modelling 
 
 full.novel.mat <- inv.frame.builder(full.nnc.matrices)
 
@@ -166,126 +147,25 @@ full.novel.mat <- inv.frame.builder(full.nnc.matrices)
 #### Step 4. Modelling emergence of novelty by invasives turnover #########
 ###########################################################################
 
-model.plotter.6 <- function(invader.models, points){
-  
-  if (points){   
-    plot_model(invader.models$model$novel, type = "pred",  terms=c("INC_increase [all]"), 
-               title = "Probability of Novelty Emergence explained by Invader dynamics",
-               axis.title = c("Net change in Invader Relative Abundance","Probability of Novel State (%)"),
-               pred.type = "fe", colors = "green", show.data = T)
-  }else{
-    
-    
-    # Plot effects with ggplot
-    
-    df_novel <- ggpredict(invader.models$novel$model, type = "fe",  terms="INC_increase [all]")
-    df_instant <- ggpredict(invader.models$instant$model, type = "fe" ,terms= "INC_increase [all]")
-    df_cumul <- ggpredict(invader.models$cumul$model, type = "fe" ,terms= "INC_increase [all]")
-    
-    # Plot invader effect holding all else equal
-    
-    p1 <- ggplot(df_novel, aes(x, predicted)) +
-      geom_line(color = "gold", lwd = 1) +
-      geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "yellow") +
-      theme_bw() +
-      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
-            axis.line = element_line("black"), panel.border = element_blank()) + 
-      labs(y = "True Novel State (%)", x = "Invader Abundance Change") + 
-      ylim(c(0:1))
-    
-    p2 <- ggplot(df_instant, aes(x, predicted)) +
-      geom_line(color = "red1", lwd = 1) +
-      geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "red3") +
-      theme_bw() +
-      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
-            axis.line = element_line("black"), panel.border = element_blank()) + 
-      labs(y = "Instantaneous Novel State (%)", x = "Invader Abundance Change") + 
-      ylim(c(0:1))
-    
-    p3 <- ggplot(df_cumul, aes(x, predicted)) +
-      geom_line(color = "steelblue4", lwd = 1) +
-      geom_ribbon(aes(ymin=conf.low, ymax = conf.high), alpha = 0.25, fill = "mediumturquoise") +
-      theme_bw() +
-      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
-            axis.line = element_line("black"), panel.border = element_blank()) + 
-      labs(y = "Cumulative Novel State (%)", x = "Invader Abundance Change") + 
-      ylim(c(0:1))
-    
-    # 3-way plot
-    grid.arrange(p1,p2,p3, nrow = 3)
-  }
-}
-
-inv.nov.glmm <- function(full.novel.mat, plot){
-
-  cat.var <- c("instant", "cumul", "novel")
-  
-  # This function runs a GLM for each novelty category
-  invader.models <- lapply(cat.var, function(cat.1){
-    
-    # Had to do it this way, bit clunky but works fine
-    full.novel.mat$response <-  full.novel.mat[,..cat.1]  
-
-    print(paste0("Running ", cat.1, " invader model"))  
-    
-    # GLMM with interaction term and a nested random effect
-    mod <- glmer(response ~ bin_lag + position + INC_increase + (1|country/basin),
-                 data = full.novel.mat, family = binomial)
-    
-    full.novel.mat$response <- NULL
-    
-    # Model Diagnostics with DHARMA
-    disp.test <- testDispersion(simulateResiduals(mod))
-    print(ifelse(disp.test$p.value <= 0.05, 
-                 paste0("Dispersal not OK ", round(disp.test$statistic, 2)),
-                 "Dispersal OK"))
-  
-    # Add coefficients to output to make inspection easier
-    mod.1 <- list("model" = mod, "summary" = as.data.frame(summary(mod)$coef))
-    
-    return(mod.1)
-  
-  })
-  
-  names(invader.models) <- cat.var
-  
-  if(plot){
-    
-    # if true, model plots for the invader effect are returned.
-    model.plotter.6(invader.models, points = F)
-  }
-  
-  return(invader.models)
-}
-
 # This function runs GLMM's for the invasives-novelty investigations. If plot = T,
-# Additional plots of the invader effect on novelty probability are plotted. 
+# Additional plots of the invader effect on novelty probability are saved. 
+# CSV's with model output are simultaneously created
 
 inv.models <- inv.nov.glmm(full.novel.mat, plot = T)
-
 
 #################################################################
 #### Step 5. Investigating Novelty Persistence  #################
 #################################################################
 
-# Generate a list of Time Series where novelty was discovered
+# Here, we use ANOSIM to further analyse what happens to a novel state
+# after it emerges.
 
-rel.abu.1.com <- rbindlist(lapply(list(Fish_Communities_A$BioRealm_Novelty_A$palearctic_novelty_A,
-                                       Fish_Communities_A$BioRealm_Novelty_A$nearctic_novelty_A,
-                                       Fish_Communities_A$BioRealm_Novelty_A$afrotropics_novelty_A,
-                                       Fish_Communities_A$BioRealm_Novelty_A$neotropics_novelty_A,
-                                       Fish_Communities_A$BioRealm_Novelty_A$australasia_novelty_A), FUN = "rbindlist"))
+# This function applies the ANOSIM algorithm to all novel comm.
+# and returns a list of summary statistics which help us to
+# objectively classify 'blips'. It takes the novelty framework
+# output as an input. 
 
-# List of sites in our community list
-novel.list <- as.list(rel.abu.1.com[rel.abu.1.com$cat == "novel"]$site)
-
-# We will use ANOSIM to compare pre and post novel groups. Once we have 
-# established which
-# communities are not ecological blips, we can investigate how long novelty
-# persists.
-
-# Applies novelty.trajectory.plotter to a list of Time Series
-anosim.plots.list <- novelty.trajectory.lists(novel.list)
+anosim.plots.list <- anosim.analyzer(Fish_Communities_A)
 
 # We now have a method of 1) visualizing differences between communities in two-dimensional
 # space and 2) determining whether the difference between pre- and post-novel states is greater
@@ -300,24 +180,16 @@ anosim.plots.list <- novelty.trajectory.lists(novel.list)
 # leads to an R statistic closer to 1. If it does, that means that the removed community was actually closer
 # to the pre-novel states than the original R statistic made it appear.
 
-
-# Compute the length of the novel state period, assuming that a dissimilarity of 0.85 is sufficient.
-# Essentially, when a dissimilarity of 0.85 is encountered, the length of that period is validated.
+# We will compute the length of the novel state, assuming that a dissimilarity of 0.85 is sufficient.
+# Essentially, when a dissimilarity of >0.85 is encountered, the length of that period is validated.
 # A group of novel states may span quite some time, but if the R statistic is low, these 'novel states'
-# are simply extensions of the pre-novel states and thus the novel states are assigned a duration of 1 
+# are simply extensions of the pre-novel states and thus the novel community is assigned a duration of 1 
 # (which is just the actual novel event).
 
+# This function executes everything discussed above
+full.novelty.lengths <- novel.length.calculator(anosim.plots.list, cut.off = 0.85)
 
-# Filter out novel communities that show a lack of difference. It also 
-# returns the data in a useful format. 
-
-true.novelty.output <- cut.off.generator(anosim.plots.list)
-
-# Calculate lengths of novel communities, if they exceed the threshold value. Returns length and R stat. 
-
-full.novelty.lengths <- novel.length.checker(true.novelty.output, cut.off = 0.85)
-
-# Add on to big df straight away!
+# Add the calculated lengths to our main data frame
 full.novel.mat$novel.length <- NA
 
 for(i in 1:nrow(full.novel.mat)){
@@ -344,140 +216,19 @@ full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
 # We have an unbiased method that tells us when the state ends, so we know what it "novel" and
 # what is not.
 
-## Create new data frame for analysis of the novel communities.##
-## look at average ecological metrics for the novel community instead of just the transition. ##
+# This functions extract information from the novelty results and returns a data frame with summary
+# statistics. It also returns a data frame with 'state-level metrics'; a summary of important 
+# biological metrics aggregated at distinct periods within each time frame.
+
+nov.comm.summary <- novel.comm.analyzer(full.novel.mat)
+
+# Save summary stats to a CSV file
+
+write.csv(nov.comm.summary$summary, 
+          "./outputs/nov_summary_stats.csv")
 
 
-# Create a frame with only novel communities for further analysis
-nov.comm.all <- subset(full.novel.mat, cat == "novel")
-
-# Isolate non-blips
-nov.comm.no.blip <- subset(full.novel.mat, cat == "novel" & novel.length > 0)
-
-# New state-level df for analyses of the non-blip novel communities through time
-nov.summary <- rbindlist(lapply(nov.comm.no.blip$site, function(ID){
-  
-  # Identify the novel points using the length we calculated
-  print(ID)
-  id <- ID # start with a single to see how it works
-  
-  # Extract length of the novel state
-  state.length <- as.double(unique(nov.comm.no.blip[which(nov.comm.no.blip$site == id), "novel.length"]))
-  
-  # Use that length to extract all the points that make up the novel state
-  
-  year.start <- as.double(min(nov.comm.no.blip[which(nov.comm.no.blip$site == id), "bins"]))
-  
-  year.end <- year.start - state.length # Easy way to find the endpoints
-  
-  # Add a little variable that tracks whether or not the state is "still counting"
-  # We compare the nov. comm. end bin to the timeseries end bin.
-  
-  pres.stat <- ifelse(year.end == min(full.novel.mat[full.novel.mat$site == id, "bins"]), "Still counting", "Over")
-  
-  
-  # Now we extract the points from our df.
-  
-  years.nov <- c(year.start:year.end) # this will include values with no communities, but that's fine
-  
-  nov.stat.comm <- subset(full.novel.mat, site == id & bins %in% years.nov) # There are the communities within a novel state!
-  
-  # There is always a transition period. Sometimes this is a bit longer than one year,
-  # I think it would be fair to add this to the novel community, just to count ext and orig.
-  temp <- subset(full.novel.mat, site == id)
-  trans.gap <- temp$bins[which(temp$cat == "novel")-1] - temp$bins[which(temp$cat == "novel")] - 1
-  transition.period <- ifelse(is_empty(trans.gap), 0, trans.gap)
-  
-  # compute average diversity metrics, we want PER YEAR, NOT PER TIMEJUMP for extinctions and originations
-  
-  mean.evenness.n <- mean(nov.stat.comm$evenness) # normal mean is ok here
-  mean.shannon.n <- mean(nov.stat.comm$shannon.d)
-  mean.ext.n <- sum(nov.stat.comm$ext, na.rm = T)/(state.length +transition.period) # more accurate this way
-  mean.orig.n <- sum(nov.stat.comm$orig, na.rm = T)/(state.length +transition.period)
-  
-  # I think we also need to extract the non-novel communities to do comparisons
-  
-  # Save total years non-novel in case we want it as a covariate
-  
-  years.non.nov <- max(temp$bins) - min(temp$bins) - state.length - transition.period
-  
-  # Non-novel comms
-  back.stat.comm <- subset(full.novel.mat, site == id & bins %!in% years.nov)
-  
-  mean.evenness.b <- mean(back.stat.comm$evenness)
-  mean.shannon.b <- mean(back.stat.comm$shannon.d)
-  mean.ext.b <- sum(back.stat.comm$ext, na.rm = T)/years.non.nov
-  mean.orig.b <- sum(back.stat.comm$orig, na.rm = T)/years.non.nov
-  
-  # Invaders
-  mean.invaders.n <- mean(nov.stat.comm$INC)
-  mean.invaders.b <- mean(back.stat.comm$INC)
-  
-  # Return a new df with state-level metrics
-  
-  state.level.metrics <- data.frame(matrix(data = NA, nrow =2))
-  
-  state.level.metrics$state <- NA
-  state.level.metrics$length <- NA
-  state.level.metrics$mean.even <- NA
-  state.level.metrics$mean.shannon <- NA
-  state.level.metrics$mean.orig <- NA
-  state.level.metrics$mean.ext <- NA
-  state.level.metrics$site <- id
-  state.level.metrics[,1] <- NULL # remove the auto column 
-  state.level.metrics$country <- unique(temp$country)
-  state.level.metrics$invaders <- NA
-  state.level.metrics$begin <- year.start
-  state.level.metrics$end <- year.end
-  state.level.metrics$status <- pres.stat
-  
-  # There's one more fun thing we can add, the ratio between non-novel and novel for orig and ext.
-  # It will just be entered for the novel community in the df
-  
-  # We can now fill in the new df based on some distinctions between states,
-  # this looks a bit tedious but is actually the quickest way.
-  
-  state.level.metrics[1, c("state", "length", "mean.even", 
-                           "mean.shannon", "mean.orig", "mean.ext", "invaders")] <- c("novel", state.length, mean.evenness.n,
-                                                                                      mean.shannon.n, mean.orig.n, mean.ext.n, mean.invaders.n)
-  state.level.metrics[2, c("state", "length", "mean.even", 
-                           "mean.shannon", "mean.orig", "mean.ext", "invaders")] <- c("back", years.non.nov, mean.evenness.b,
-                                                                                      mean.shannon.b, mean.orig.b, mean.ext.b, mean.invaders.b)
-  
-  
-  
-  return(state.level.metrics)
-  
-}))
-
-# Add a status variable for persistence type AND for if the state ended before the time series
-nov.comm.all$type <- NA
-nov.comm.all$status <- NA
-
-# Loops to fill in status and type data
-for (i in 1:nrow(nov.comm.all)){
-  if (nov.comm.all$site[i] %in% nov.comm.no.blip$site){
-    nov.comm.all$type[i] <- "persistent"
-  } else {nov.comm.all$type[i] <- "blip"}
-}
-for (i in 1:nrow(nov.comm.all)){
-  print(i)
-  for (j in 1:nrow(nov.summary)){
-    if(nov.comm.all$site[i] == nov.summary$site[j]){
-      nov.comm.all$status[i] <- nov.summary$status[j]
-    }
-  }
-}
-
-# We now have a complete data frame with all the information needed to do some evaluations
-
-# How many are blips?
-perc.blip <- nrow(subset(nov.comm.all, type == "blip"))/(nrow(subset(nov.comm.all, type == "persistent")) + nrow(subset(nov.comm.all, type == "blip")))
-perc.no.blip <- 1-perc.blip
-
-# How many persist till the end of the time series?
-no.end.comm <- nrow(subset(nov.comm.all, status == "Still counting"))/(nrow(subset(nov.comm.all, status == "Still counting")) + nrow(subset(nov.comm.all, status == "Over")))
-
+#### End of Main Analyses ####
 
 
 

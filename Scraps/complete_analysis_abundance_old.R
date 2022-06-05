@@ -1,7 +1,7 @@
 ### Analysis of global fish communities using the Novelty detection Framework (Pandolfi et al, 2020) ###
 
 # This is the "unaltered abundance" data pathway. Remember to load in functions, which are stored in separate files.
-# This pathway also includes otpions for changing the bin width.
+# This pathway also includes options for changing the bin width.
 # You will not find individual functions loaded in here; ensure that the "functions" is imported into Rstudio, this
 # folder contains all the essential functions.
 

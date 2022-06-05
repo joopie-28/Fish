@@ -151,7 +151,6 @@ rm(GLM_input_A_1, GLM_input_A_2)
 saveRDS(GLM_lists_A, "./outputs/GLM_lists_A.rds")
 
 
-
 #### End of Novelty Detection
 
 
