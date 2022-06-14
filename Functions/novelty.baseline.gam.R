@@ -318,7 +318,7 @@ novelty.trajectory.lists <- function(check_list){
   return(nam)
 }
 
-cut.off.generator <- function(anosim.lists, number = 0.0){
+cut.off.generator <- function(anosim.lists, number = -1){
   
   anosim.plots.list <- anosim.lists
   
@@ -346,7 +346,7 @@ cut.off.generator <- function(anosim.lists, number = 0.0){
   # Add names
   
   for (i in 1:length(true.novelty.output)){
-    names(true.novelty.output)[i] <- paste0(true.novelty.output[[i]]$`Novelty parameters`$site[1], "-", 
+    names(true.novelty.output)[i] <- paste0(true.novelty.output[[i]]$`Novelty parameters`$site[1], ",", 
                                             round(true.novelty.output[[i]]$ANOSIM$statistic, digits = 2))
   }
   
@@ -531,6 +531,315 @@ novel.length.checker <- function(novel.output, cut.off){
   
   return(grand.output.fil)
 }
+
+
+
+
+
+
+#### Novel Length Algo as per 13-06. This is the more complete version
+### that involves decay matrices etc. Deemed a bit too complicated for
+### the nov.comm paper!
+
+novel.length.depr <- function(novel.output, cut.off){
+  
+  
+  
+  grand_output <- lapply(1:length(novel.output), function(i){  
+    
+    matrix <- novel.output[[i]]
+    
+    # Create a label frame by running Novel Detection Framework
+    label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                          alpha = 0.05,
+                                          metric = "bray",
+                                          plot =T, 
+                                          site = names(novel.output)[i],
+                                          plot.data = FALSE,
+                                          gam.max.k = -1)
+    
+    # Print the name so we know what we're on
+    name <- names(novel.output)[i]
+    print(name)
+    
+    # Module for proper orientation, can be conditional
+    
+    if(as.numeric(rownames(matrix))[nrow(matrix)] <  as.numeric(rownames(matrix))[1]){
+      
+      # Flip such that orientation is correct 
+      for(i in 1:length(matrix)){
+        matrix[,i] <- rev(matrix[,i])
+      }
+      rownames(matrix) <- rev(rownames(matrix))
+    }
+    
+    # Assign "background" state to first 5  bins
+    
+    for (i in (nrow(matrix)):(nrow(matrix)-4)) {
+      rownames(matrix)[i] <- paste0("back-", rownames(matrix)[i])
+      
+    }
+    
+    # Assign actual states to the remaining bins, based on NDF
+    
+    for (i in 1:(dim(matrix)[1]-5)) {
+      for (j in 1:(dim(label_frame)[1])) {
+        
+        if ((rownames(matrix)[i]) == (label_frame$bins)[j]){
+          rownames(matrix)[i] <- paste0(label_frame$cat[j], "-", rownames(matrix)[i])
+        }
+        
+      } 
+    } 
+    
+    
+    # Obtain novel index from the data
+    
+    novel_frame <- matrix %>% dplyr::filter(str_detect(rownames(matrix), "novel"))
+    novel_frame <- novel_frame[1,]
+    
+    
+    if(nrow(novel_frame) > 0){
+      
+      novel_bin <- as.numeric(strsplit(rownames(novel_frame), split = "-")[[1]][2])
+      
+      novel_index <- which(rownames(matrix) == paste0("novel-", novel_bin))
+      
+      
+    }
+    
+    
+    # Quick fail safe for novelty at the very end of a time series,
+    # The output is simply 1! We also have no idea what the post-trajectory will be
+    
+    if(novel_index == 1){
+      return(list(length = 1, message = "Novelty at very end"))
+    }
+    
+    # Now assign two groups based on that index
+    
+    matrix$stage <- NULL
+    
+    for (i in 1:nrow(matrix)) {
+      
+      if(i <= novel_index){
+        matrix$stage[i] <- "Post_Novel"
+      }
+      if (i > novel_index) {
+        matrix$stage[i] <- "Pre_Novel"
+      }
+    }
+    
+    #### Primary Module ####
+    
+    # Set up some vectors for our ANOSIM iterations
+    r.vector <- NULL
+    sig.vector <- NULL
+    timebin <- NULL
+    
+    # Assign a temporary matrix for the loop
+    matrix.temp <- matrix
+    
+    # Loop over multiple configurations to find the most suitable
+    print("Scanning compositional space")
+    for (k in 1:(novel_index)){
+      message <- NULL
+      
+      if(length(unique(matrix[-(novel_index),]$stage)) > 1 ){
+        
+        # Run the analysis on post and pre only, exclude the novel community.
+        similarity_test <- anosim(matrix.temp[,-(ncol(matrix.temp))], 
+                                  grouping = matrix.temp$stage, 
+                                  permutations = 1000, 
+                                  distance = "bray")
+        
+        # Store relevant results
+        r.vector[k] <- (similarity_test$statistic)
+        sig.vector[k] <- (similarity_test$signif)
+        timebin[k] <- nrow(subset(matrix.temp, stage == "Post_Novel"))
+        
+        # This "restores" the matrix so that we can iterate over it again
+        matrix.temp<-matrix
+        matrix.temp[1:(novel_index-k), ]$stage <- "Pre_Novel"
+      }
+      
+    }
+    # Create a tidy data frame for our iteration results
+    ANOSIM.df <- data.frame("R" = r.vector, "Sig.p"=sig.vector, "Set"=timebin)
+    
+    # Set Significance cut off a bit lower because our data is limited..
+    best.R <- ifelse(any(ANOSIM.df$Sig.p < 0.15), max(subset(ANOSIM.df, Sig.p <= 0.15)$R), 0)
+    # If we can not get any significance at all, we set length to 0 and call them 'oscillators'
+    length <- ifelse(best.R > 0, ANOSIM.df[which(ANOSIM.df$R == best.R), "Set"], 0)
+    
+    
+    
+    
+    
+    
+    #### Decayer Module ####
+    
+    # I would like to add in an extra module that then breaks up the post-novel states
+    # to test if they are moving away from the origin. Helps differentiate structured
+    # movement back and forth from an exploration of novel compositional space.
+    
+    # However, we can only do this if the number of post-novel communities is substantial
+    # at least 3 or so..
+    
+    print("Inspecting decay trajectory")
+    
+    # Extract the 'decay matrix', the communities post novelty
+    # we will scan these to see if there's distinct clusters
+    decay.matrix <- subset(matrix, stage == "Post_Novel")
+    
+    # Our criterium for running the decay analysis,
+    # ANOSIM wont't work otherwise and getting
+    # significant results is hard
+    if(nrow(decay.matrix) >4){
+      
+      # Set up new result vectors
+      decay.R <- NULL
+      decay.Sig <- NULL
+      decay.length <- NULL
+      
+      # Run the loop, similar to initial procedure
+      for(i in (nrow(decay.matrix)-1):1){
+        
+        decay.matrix$stage <- "novel"
+        decay.matrix$stage[c(1:i)] <- "different"
+        
+        
+        # Find the allocation with max distance between groups
+        
+        test <- anosim(decay.matrix[,-(ncol(decay.matrix))], 
+                       grouping = decay.matrix$stage, 
+                       permutations = 1000, distance = "bray")
+        
+        decay.R[i] <- test$statistic
+        decay.Sig[i] <- test$signif
+        decay.length[i] <- nrow(subset(decay.matrix, stage == "novel"))
+        
+      }
+      # Store these neatly
+      DECAY.df <- data.frame("R" = decay.R, "Sig.p"=decay.Sig, "Set"=decay.length)
+      decay.best <- DECAY.df[which.max(DECAY.df$R), "Set"] 
+      decay.R <- DECAY.df[which.max(DECAY.df$R), "R"] 
+      
+      #### Pre and Post Comparison Module ####
+      # One final test: are the communities surrounding the novel emergence significantly different?
+      
+      # Initialize a new matrix
+      diff.matrix <- matrix
+      
+      # Remove the novel community such that comparison is just between pre and post
+      diff.matrix <- diff.matrix[-(novel_index), ]
+      
+      # Loop through each module, iteratively removing communities as to find
+      # the true pattern and max R. 
+      
+      max.iteration <- nrow(subset(matrix, stage == "Post_Novel"))
+      
+      diff.R <- NULL
+      diff.Sig <- NULL
+      diff.length <- NULL
+      # Removing states to see if we can find significant differences
+      for (i in 1:(max.iteration-2) ){
+        
+        # Remove the first row each time unitl we hit the target
+        diff.matrix <- diff.matrix[-1, ]
+        print(diff.matrix)
+        
+        diff.test <- anosim(diff.matrix[,-(ncol(diff.matrix))], 
+                            grouping = diff.matrix$stage, 
+                            permutations = 1000, distance = "bray")
+        
+        diff.R[i] <- diff.test$statistic
+        diff.Sig[i] <- diff.test$signif
+        diff.length[i] <- nrow(subset(diff.matrix, stage == "Post_Novel"))
+      }
+      
+      diff.df <- data.frame("R" = diff.R, "Sig.p"=diff.Sig, "Length"=diff.length)
+      
+      # If there's no difference, it can only be a blip.
+      
+      sig.df <- subset(diff.df, "Sig.p" <= 0.05)
+      
+      if(nrow(sig.df) == 0 | max(sig.df$R) < 0.75){
+        message <- "BLIP.D"
+      }
+      
+      # We have enough to analyse decay so we will activate the decayer option
+      run.decayer <- TRUE
+      
+      
+    }else{
+      
+      # Provide some empty values in the case we cannot estimate decay df
+      DECAY.df <- NA
+      decay.best <- NA
+      decay.R <- NA
+      run.decayer <- FALSE
+    }
+    # Short persistence if decay and full agree, and our threshold is validated
+    if(best.R > 0.75){
+      message <- "SHORT.PERSISTENCE"
+      
+      # Blips are special cases of short persisters
+      if(length == 1){
+        message <- "BLIP"
+        
+        # Correct for time series with novelty at the very end
+        if(novel_index == nrow(matrix)){
+          message <- "SINGLE_END"
+        }
+      }
+    }
+    
+    # Full persistence will have a high R and a length equal to the 
+    # remainder of the series
+    if(best.R > 0.75 & length == novel_index){
+      message <- "FULL.PERSISTENCE"
+      
+    }
+    
+    # Finally, we need something for the edge cases, those that 
+    # can not really be put in a box. only running if we have a decay estimate
+    if(run.decayer){
+      if(decay.R > 0.75 & best.R < 0.75){
+        message <- "NOVEL.DECAYER"
+        # Use decay length as this is more reasonable
+        # in these cases
+        if(DECAY.df[which.max(DECAY.df$R), "Sig.p"]<0.05 ){
+          length <- decay.best
+        }
+        
+        
+      }
+    }
+    
+    
+    # Placeholder, I want to extend this module by comparing states
+    if(length == 0){
+      message <- "OSCILLATOR"
+      # Set to 1 because it always last for min 1 year!
+      length <- 1
+    }
+    
+    output <- list(name ,ANOSIM.df, best.R, length, novel_index, DECAY.df, message, diff.R)
+    names(output) <- c("Simulation" ,"data", "R", "Length", "Nov.emergence", "Decay.stats", "Class", "Pre-post")
+    
+    
+    return(output)
+    #}
+  })
+  return(grand_output)
+  
+}
+
+
+
+
+
 
 # Sensitivity analysis of ANOSIM
 
