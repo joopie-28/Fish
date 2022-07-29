@@ -27,8 +27,8 @@ install.packages(c("mgcv", "vegan", "lme4", "nlme",
                    "brms", "data.table"))
 
 # Load data from RivFishTime
-time_series_data <- read.csv("1873_2_RivFishTIME_TimeseriesTable.csv")
-Survey_Data <- read.csv("1873_2_RivFishTIME_SurveyTable.csv")
+time_series_data <- read.csv("inputs/1873_2_RivFishTIME_TimeseriesTable.csv")
+Survey_Data <- read.csv("inputs/1873_2_RivFishTIME_SurveyTable.csv")
 
 # Assign individual time series to BioRealm groups.
 

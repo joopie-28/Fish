@@ -94,10 +94,19 @@ geo.timeseries.full <- cbind(geo.timeseries.sf,
   return(df)
 })))
 
-summary(glm(cbind(geo.timeseries.full$novel, (geo.timeseries.full$length-geo.timeseries.full$novel))~(length) + Land_use+ Builtup + Elevation, 
-    data = geo.timeseries.full, family = "binomial"))
+fit <- glm(cbind(geo.timeseries.full$novel, (geo.timeseries.full$length-geo.timeseries.full$novel))~(length)+Builtup+Land_use, 
+    data = geo.timeseries.full, family = "binomial")
+
+plot_model(fit, type = "pred",  terms=c("Builtup [all]"), 
+           title = "Probability of Novelty Emergence explained by Invader dynamics",
+           axis.title = c("Net change in Invader Relative Abundance","Probability of Novel State (%)"),
+           pred.type = "fe", colors = "green", show.data = T)
 
 
+
+
+summary(glm((geo.timeseries.full$novel/geo.timeseries.full$length)~Elevation+length+Builtup, data = geo.timeseries.full,family = "binomial"))
+plot((geo.timeseries.full$novel/geo.timeseries.full$length)~geo.timeseries.full$Elevation)
 
 ### Step 2. Extracting climate data and spatiotemporal manipulation ###
 

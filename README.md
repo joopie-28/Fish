@@ -29,5 +29,6 @@ analyses, such as species status data, a host of smaller functions found in the 
 name a few. Any user should thus aim to run these scripts within an R-environment that includes all 
 relevant data, or particular parts of the code will not execute.
 
+On a final note, script layout is quite modular, which I feel improves readbility. However, this means that if you want to examine what a function is doing 'under the hood', you need to go the specific script where the function is declared (these scripts generally have the same name as the function so isn't too problematic).
 
 

@@ -50,7 +50,7 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "brms", "data.table", "data.table", 
                  "stringi", "tinytex", "knitr",
                  "sjPlot", "rworldmap", "ggeffects", 
-                 "gridExtra"))
+                 "gridExtra", "clustsig", "dendextend"))
 
 # Load data and make sure names are in orderly fashion.
 time_series_data <- read.csv("./inputs/1873_2_RivFishTIME_TimeseriesTable.csv") # RIVFishTime 
@@ -195,7 +195,9 @@ for(i in 1:length(novelty.lengths)){
   
 }
 
+# Set non-novel lengths to 0 instead of NA
 full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
+full.novel.mat$novel.class[is.na(full.novel.mat$novel.class)] <- "NONE"
 
 
 
@@ -210,6 +212,8 @@ full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
 # This functions extract information from the novelty results and returns a data frame with summary
 # statistics. It also returns a data frame with 'state-level metrics'; a summary of important 
 # biological metrics aggregated at distinct periods within each time frame.
+
+# NEED TO UPDATE THIS UNFINISHED PER 16-06-2022
 
 nov.comm.summary <- novel.comm.analyzer(full.novel.mat)
 
@@ -250,12 +254,260 @@ matrices <- generate.matrices("full.pers", 1)
 matrices <- generate.matrices("slow.decay", 1)
 
 
-### Plot example of ANOSIM Algorithm
+#### Hierarchical clustering to identify novel community persistence ####
 
-# I want 9 panels with 3x examples of how the algorithm reaches finds R max.
-# Looks good, can probably turn this int a function. Can get rid of a whole lot of code.
+# Function to check for sequentiality
+is.sequential <- function(x){
+  all(diff(x) == diff(x)[1])
+}
 
-mds.plotter <- function(matrix, col.vec, ylim, xlim){
+nov.cluster.id <- function(matrix){
+
+  # Identify novelty in time series
+  ID <- strsplit(names(matrix), "[.]" )[[1]][2]
+  matrix <- matrix[[1]]
+  number.names <- as.numeric(rownames(matrix))[-c(1:5)]
+  
+  
+  label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                         alpha = 0.05,
+                         metric = "bray",
+                         plot =F, 
+                         site = ID,
+                         plot.data = FALSE,
+                         gam.max.k = -1)
+  
+ 
+  
+  #### Pre-processing Module ####
+  
+  if(as.numeric(rownames(matrix))[nrow(matrix)] <  as.numeric(rownames(matrix))[1]){
+    
+    # Flip such that orientation is correct 
+    for(i in 1:length(matrix)){
+      matrix[,i] <- rev(matrix[,i])
+    }
+    rownames(matrix) <- rev(rownames(matrix))
+  }
+  
+  # Assign "background" state to first 5  bins
+  
+  for (i in (nrow(matrix)):(nrow(matrix)-4)) {
+    rownames(matrix)[i] <- paste0("back-", rownames(matrix)[i])
+    
+  }
+  
+  # Assign actual states to the remaining bins, based on NDF
+  
+  for (i in 1:(dim(matrix)[1]-5)) {
+    for (j in 1:(dim(label_frame)[1])) {
+      
+      if ((rownames(matrix)[i]) == (label_frame$bins)[j]){
+        
+        rownames(matrix)[i] <- paste0(label_frame$cat[j], "-", 
+                                      rownames(matrix)[i])
+      }
+      
+    } 
+  } 
+  
+  
+  # Obtain novel index from the data
+  
+  novel_frame <- matrix %>% dplyr::filter(str_detect(rownames(matrix), "novel"))
+  novel_frame <- novel_frame[1,]
+  
+  # Find year and row data
+  novel_bin <- as.numeric(strsplit(rownames(novel_frame), split = "-")[[1]][2])
+  
+  novel_index <- which(rownames(matrix) == paste0("novel-", novel_bin))
+  
+  # Run SIMPROF Routine on data matrix to identify multivariate structure of communities
+  matrix.temp <- matrix[-c((nrow(matrix)-4):nrow(matrix)),]
+  rownames(matrix.temp) <- rev(number.names)
+  
+  # Sometimes using bray-curtis/czekanowski can lead to an error where there are 0
+  # columns after removing the first 5 rows. This is rare and is addressed by using
+  # euclidean distance for those cases instead
+  
+  test <- tryCatch(
+    simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+            num.simulated = 999, method.distance ="czekanoswki", 
+            method.cluster = "average", alpha=.05), 
+    error=function(e) {
+      simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+              num.simulated = 999, method.distance ="euclidean", 
+              method.cluster = "average", alpha=.05) })
+  
+  # Initialize parameters for the length calculations
+  run <- TRUE
+  no.clus <- 2 # always start on 2
+  
+  # Plot dendogram result
+  par(mfrow = c(1,1))
+
+  # Use a TryCatch expression, as some structures will fail the SIMPROF hypothesis
+  # test. These are immediate blips.
+  tryCatch(simprof.plot(test), error=function(e) {
+    print("Blip Detected")
+    run <- FALSE
+    # This will activate the BLIP module and assign the correct 
+    # category
+    length <- 1
+    
+    # We will also plot the dendrogram, without SIMPROF coloration.
+    # Just a nice visualisation
+    dev.off()
+    test<-(hclust(vegdist(matrix.temp), method = "average"))
+    par(mar = c(3,3,3,3))
+    plot(test, hang=-1,
+         main = "Blip Dendrogram", xlab = "")
+    })
+
+  # Start of the length calculation module
+  
+  while(run == TRUE){
+    
+    # Length counter module, reverse such that oldest is last
+    trajectory <- rev(cutree(test$hclust, k=no.clus))
+    
+    # Find group allocation
+    novel.group <- trajectory[[which(names(trajectory)==novel_bin)]]
+    
+    # Count consecutive length of novel group
+    novel.slice <- (which(trajectory == novel.group))
+    
+    # Find start and end points
+    extrema <- as.numeric(names(novel.slice)[c(1,length(novel.slice))])
+    
+    # Check that start corresponds to novel bin. If False,
+    # increase number of supersets to better reflect strutcture.
+    if(novel_bin != extrema[1]){
+      no.clus <- no.clus +1
+    }else{
+      
+      start <- extrema[1]
+      
+      # Check that numbers are sequential using custom 
+      # function 
+      
+      if(is.sequential(novel.slice)){
+        end <- extrema[2]
+      }
+      
+      # If not sequential, adjust the end year accordingly
+      else{
+        bool.vec <- diff(novel.slice) == 1
+        index <- which(bool.vec == FALSE)[1] - 1
+        # correct for 0 index during blips
+        end <- ifelse(index > 0,as.numeric(names(bool.vec[index])),novel_bin)
+      }
+
+      # Calculate Length
+      length <- start-end
+      
+      # Solve for blips, as we want to set the time in years, 
+      # not timebins
+      if(length == 0){
+        length <- 1
+      }
+      run <- FALSE
+    }
+    
+    # Use SIMPROF to assess significance of clusters. Need 
+    # to make sure that coarser groups are supersets of signif
+    # divisions.
+    
+  }
+  
+  # Initialize a class variable
+  Class <- "NONE"
+
+  # Allocate blips
+   if(length == 1){
+  
+      Class <- "BLIP"
+      end <- as.numeric(rownames(matrix.temp[novel_index-1,]))
+      length <- novel_bin - end
+   }
+
+  # Test for full persistence
+  if(Class != "BLIP"){
+  
+    index.vector <- which(names(novel.slice) %in% names(trajectory[novel.slice[1]:length(trajectory)]))
+    
+    if (length(trajectory[novel.slice[1]:length(trajectory)]) == length(index.vector)){
+    
+      Class <- "Full Persistence"
+    }
+  }
+  # Rest are short persisters
+  if(Class != "BLIP" & Class != "Full Persistence"){
+    
+    Class <- "Short Persistence"
+    
+  }
+  
+  if(novel_bin == number.names[length(number.names)]){
+    Class <- "END"
+    length <- 0
+  }
+  
+  
+
+
+ # Return data
+ return.data <- list(c(list("ID" = ID, "begin" =start, 
+                     "end" =end, "length"= length, 
+                     "Class" = Class, "clusters" =no.clus)))
+ names(return.data) <- ID
+ return(return.data)
+ 
+}
+
+# Check if overarching groups are significant (PART OF nov.cluster.id)
+
+# Need to make some iterations which test that groups are composed of significant subgroups
+# rather than mixed.
+
+test$significantclusters
+
+nov.cluster.id(matrices[[1]][13])
+# Execute persistence clustering over all novel time series
+# Need to correct for inability to cluster some..
+
+unlisted.mat <- unlist(matrices, recursive = F)
+
+novelty.pers <- do.call(c, 
+                           lapply(1:length(unlisted.mat), function(x){
+                             print(x)
+                             nov.cluster.id(unlisted.mat[x])
+                             
+                           }))
+
+# Add the calculated lengths to our main data frame
+full.novel.mat$novel.length <- NA
+full.novel.mat$novel.class <- NA
+
+for(i in 1:length(novelty.pers)){
+  indices <- which(full.novel.mat$site == novelty.pers[[i]]$ID & full.novel.mat$cat == "novel")[1]
+  full.novel.mat$novel.length[indices] <- novelty.pers[[i]]$length # need to fix end point comm.
+  full.novel.mat$novel.class[indices] <-  novelty.pers[[i]]$Class
+  
+}
+
+
+
+
+# Plot NMDS next to Dendrogram
+
+mds.cluster.plotter <- function(matrix){
+  
+  # Set plotting params
+  par(mfrow = c(1,2))
+  
+  
+  
   
   # Extract labels
   label <- identify.novel.gam.MDS(site.sp.mat = matrix, 
@@ -287,11 +539,10 @@ mds.plotter <- function(matrix, col.vec, ylim, xlim){
   # Run MDS 
   NMDS=metaMDS(matrix[,-c(ncol(matrix), (ncol(matrix)-1))], 
                k=2, trymax = 10000)
-  plot(NMDS, type = "n", ylim=ylim, xlim = xlim,
-       yaxt = "n", xaxt = "n")
+  plot(NMDS, type = "n", ylab = "MDS2", xlab = "MDS1")
   points(x = NMDS$points[,"MDS1"], 
          y = NMDS$points[, "MDS2"], 
-         bg = col.vec,
+         bg = matrix$colour,
          pch = 21,
          col = "black",
          cex = 1.4)
@@ -304,172 +555,79 @@ mds.plotter <- function(matrix, col.vec, ylim, xlim){
            y1 = NMDS$points[i+1, "MDS2"], length = 0.05, lwd = 1)
   }
   
-}
-
-pdf(file = "/Users/sassen/Desktop/ANOSIM.pdf",
-    width = 8,
-    height = 10)
-
-# Set parameters
-par(mfrow = c(3,3))
-par(oma = c(4,4,2,2))
-
-output <- novel.length.algo(matrices[234])
-
-# find the first index of emergence
-first <- output[[1]]$Emergence_index
-total <- output[[1]]$Timeseries_length
-
-# Plot some good examples
-for(i in 1:3){
+  print("Clustering")
   
-  if(i == 1){
-    col.vec <- c(rep("grey", first-1), rep("orange", (total-first+1)))
+  test <- simprof(data = matrix[,-c(ncol(matrix), (ncol(matrix)-1))], num.expected = 1000,
+                  num.simulated = 999, method.distance ="braycurtis", 
+                  method.cluster = "centroid"
+                  ,alpha=0.05, undef.zero = T)
+  
+  temp <- simprof.plot(test, plot = F)
+  
+  dendro.col.df <- data.frame(labels = as.numeric(labels(temp)))
+  dendro.col.df$colour <- NA
+  dendro.col.df$cat <- NA
 
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 2){
-    col.vec <- c(rep("grey", first-1), rep("orange", (total-first-5)), rep("grey", 6 ))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 3){
-    col.vec <- c(rep("grey", first-1), rep("orange", 1), rep("grey", total-first))
-
-    par(mar = c(2,0,0.1,0))
+  for(i in 1:nrow(dendro.col.df)){
+    
+    index <- which(as.numeric(label$bins) == dendro.col.df$labels[i])
+    dendro.col.df$cat[i] <- label$cat[index]
+    
+    if(dendro.col.df$cat[i] == "cumul"){
+      dendro.col.df$colour[i] <- "skyblue"
+    }
+    if(dendro.col.df$cat[i] == "instant"){
+      dendro.col.df$colour[i] <- "red1"
+    }
+    if(dendro.col.df$cat[i] == "novel"){
+      dendro.col.df$colour[i] <- "orange"
+    }
+    if(dendro.col.df$cat[i] == "back"){
+      dendro.col.df$colour[i] <- "grey"}
   }
   
-  # Create the plot!
-  mds.plotter(matrices[[234]], col.vec, 
-              ylim = c(-0.5, 2.5), xlim = c(-1, 1.5)) # Blip
+  # Plot the Dendrogram
+ 
+  labels_colors(temp) <- dendro.col.df$colour
   
-  axis(side =1, line =0, at= c(-1, 0, 1))
+  labels(temp) <- paste0(dendro.col.df$cat, "-", dendro.col.df$labels)
   
-  if(i == 1){
-    axis(side =2, line =0)
-    text(-1, 2.4, "a", font=4)
-  }
-  if(i == 3){
-    axis(side = 4, line = 0)
-  }
-  
-  # Extract R and Length
-  set.length <- length(which(col.vec == "orange"))
-  index <- which(output[[1]]$data$Set == set.length)
-  set.R <- output[[1]]$data[index, "R"]
-  text.1 <- paste0("R  = ", round(set.R,digits = 2))
-  text.2 <- paste0("Length = ", set.length)
-  text(1, 2.4, text.1, font =4, pos=1)
-  text(1,2.15, text.2 , font =4,pos=1)
+  plot(temp, ylab = "Height")
   
 }
 
-output <- novel.length.algo(matrices[220])
-# find the first index of emergence
-first <- output[[1]]$Emergence_index
-total <- output[[1]]$Timeseries_length
-steps <- output[[1]]$Length_steps
+pdf(file = "/Plots/clustering_persistence.pdf",
+    width = 12,
+    height = 6)
 
-for(i in 1:3){
-  
-  if(i == 1){
-    col.vec <- c(rep("grey", nrow(matrices[[220]])-steps), rep("orange",steps ))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 2){
-    col.vec <- c(rep("grey", nrow(matrices[[220]])-steps), rep("orange",steps-1), rep("grey", 1))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 3){
-    col.vec <- c(rep("grey", nrow(matrices[[220]])-steps), rep("orange",steps-2), rep("grey", 2))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  
-  # Create the plot!
-  mds.plotter(matrices[[220]], col.vec, 
-              ylim = c(-0.5, 1), xlim = c(-.5, 1.5)) # Full persister
-  
-  axis(side =1, line =0, at= c(-1, 0, 1))
-  
-   if(i == 1){
-     axis(side =2, line =0)
-     text(-.45, 1.25, "b", font=4)
-   }
-  
-   if(i == 3){
-    axis(side = 4, line = 0)
-   }
-  
-  # Extract R and Length
-  set.length <- length(which(col.vec == "orange"))
-  index <- which(output[[1]]$data$Set == set.length)
-  set.R <- output[[1]]$data[index, "R"]
-  text.1 <- paste0("R  = ", round(set.R,digits = 2))
-  text.2 <- paste0("Length = ", set.length)
-  text(1, 1.25, text.1, font =4)
-  text(1,1, text.2 , font =4)
-  
-
-}
-
-output <- novel.length.algo(matrices[237])
-# find the first index of emergence
-first <- output[[1]]$Emergence_index
-total <- output[[1]]$Timeseries_length
-steps <- output[[1]]$Length_steps
-
-for(i in 1:3){
-  
-  if(i == 1){
-    col.vec <- c(rep("grey", nrow(matrices[[237]])-first), rep("orange",first))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 2){
-    col.vec <- c(rep("grey", nrow(matrices[[237]])-first), rep("orange",3), rep("grey", total-first-3))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  if(i == 3){
-    col.vec <- c(rep("grey", nrow(matrices[[237]])-first), rep("orange",1), rep("grey", total-first-1))
-
-    par(mar = c(2,0,0.1,0))
-  }
-  
-  mds.plotter(matrices[[237]], col.vec, 
-              ylim = c(-.75, 1), xlim = c(-.75, 1.5)) # Short persister
-  
-  axis(side =1, line =0, at= c(-1, 0, 1))
-  
-  if(i == 1){
-    axis(side =2, line =0)
-    text(-.7, 1.25, "c", font=4)
-  }
-  
-  if(i == 3){
-    axis(side = 4, line = 0)
-  }
-  
-  # Extract R and Length
-  set.length <- length(which(col.vec == "orange"))
-  index <- which(output[[1]]$data$Set == set.length)
-  set.R <- output[[1]]$data[index, "R"]
-  text.1 <- paste0("R  = ", round(set.R,digits = 2))
-  text.2 <- paste0("Length = ", set.length)
-  text(1, 1.25, text.1, font =4)
-  text(1,1, text.2 , font =4)
-}
-
-mtext("MDS1", side=1, line=2, cex=1, col="black", outer=TRUE)
-mtext("MDS2", side=2, line=2, cex=1, col="black", outer=TRUE)
-
+mds.cluster.plotter(matrices[[1]][[295]])
 dev.off()
 
 
+matrices[[1]][295]
+blip <- 0
+full <- 0
+short <- 0
+for(i in 1:length(novelty.pers)){
+  
+  if(novelty.pers[[i]]$Class == "BLIP"){
+    blip = blip + 1
+    
+  }
+  if(novelty.pers[[i]]$Class == "Short Persistence"){
+    short = short + 1
+    
+  }
+  if(novelty.pers[[i]]$Class == "Full Persistence"){
+    full = full + 1
+    
+  }
+  
+}
 
+full/503
+short/503
+blip/503
 ####################################
 ### Step X. Sensitivity Analyses ###
 ####################################
@@ -800,6 +958,11 @@ dev.off()
 
 # A figure that somehow presents the results of the invader - persistence investigation is necessary.
 #
+
+
+
+
+
 
 
 
