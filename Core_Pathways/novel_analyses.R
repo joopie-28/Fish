@@ -261,6 +261,12 @@ is.sequential <- function(x){
   all(diff(x) == diff(x)[1])
 }
 
+
+# want to change this to maybe all the communities
+# anyhow, persistence should be just that - no subcategories
+
+
+
 nov.cluster.id <- function(matrix){
 
   # Identify novelty in time series
@@ -472,7 +478,7 @@ nov.cluster.id <- function(matrix){
 
 test$significantclusters
 
-nov.cluster.id(matrices[[1]][13])
+
 # Execute persistence clustering over all novel time series
 # Need to correct for inability to cluster some..
 
@@ -496,10 +502,12 @@ for(i in 1:length(novelty.pers)){
   
 }
 
+# Set non-novel lengths to 0 instead of NA
+full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
+full.novel.mat$novel.class[is.na(full.novel.mat$novel.class)] <- "NONE"
 
 
-
-
+hist(subset(full.novel.mat, novel.class != "NONE" & novel.class != "BLIP" & novel.class != "END")$novel.length)
 
 
 
@@ -562,8 +570,8 @@ mds.cluster.plotter <- function(matrix){
   print("Clustering")
   
   test <- simprof(data = matrix[,-c(ncol(matrix), (ncol(matrix)-1))], num.expected = 1000,
-                  num.simulated = 999, method.distance ="braycurtis", 
-                  method.cluster = "centroid"
+                  num.simulated = 999, method.distance ="czekanowski", 
+                  method.cluster = "average"
                   ,alpha=0.05, undef.zero = T)
   
   temp <- simprof.plot(test, plot = F)
