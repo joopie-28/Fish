@@ -69,6 +69,115 @@ matrix_list_A_bin1 <- list_matrix_A_bins_function(ID_list,
 matrix_list_A_bin2 <- list_matrix_A_bins_function(ID_list, 
                                                   bin_width = 2)
 
+
+
+
+
+
+###### Incorporate seasonality #################
+
+
+# Isolate a single time series
+ID.list <- as.list(time_series_data$TimeSeriesID)
+
+create.seasonal.ssmat <- function(n.ID){
+   
+   # Isolate time series data from overall survey data
+   df<-subset(Survey_Data, TimeSeriesID == n.ID )
+   
+   # Create data frames for each timeseries-quarter pair
+   output<-lapply(unique(df$Quarter), function(quarter){
+
+      sub.1 <- subset(df, Quarter == quarter)
+      
+      sub.2<-as.data.frame(tapply(sub.1$Abundance,
+                                   list(sub.1$Year, sub.1$Species),
+                                   sum, na.rm = T))
+      
+      # Convert absences (NA) to 0's
+      sub.2[is.na(sub.2)]<-0
+      
+      # Convert to relative abundance
+      ss.mat <- sub.2/rowSums(sub.2)
+      
+      # Convert rownames to time in past
+      rownames(ss.mat) <- 2021-as.numeric(rownames(ss.mat))
+      
+      # Filter time series with less than 10 timesteps and at least 2 species
+      if(nrow(ss.mat) > 9 & ncol(ss.mat) > 1){
+         return(ss.mat)
+      }
+      else{
+         return(NULL)
+      }
+      
+   })
+   # Assign merger names for later use
+   names(output) <- paste0(n.ID,".", unique(df$Quarter))
+   return(output)
+}
+
+list_matrix_seasonality_function <- function(ID_list){
+  ids <- unlist(ID_list)
+
+  # Create community-by-species matrices for each season-timeseries pair
+  mats<-lapply(ids, function(x){
+     print(x)
+     create.seasonal.ssmat(x)
+  })
+  
+  # Homgenise list
+  output<-unlist(mats, recursive = F)
+  output.final<-Filter(Negate(is.null), output)
+  
+return(output.final)
+}
+
+matrix_list_seasonality <- list_matrix_seasonality_function(ID.list)
+
+novelty.detection.gam <- function(input_list){
+  
+   # Keep track of iteration
+   i <- 1
+ 
+   nov.mat <- lapply(input_list , function(mat){
+      
+      # Simple message for the viewer
+      print(paste0(i, " of ", length(input_list)))
+      
+      # provide a site name
+      ID <- names(input_list)[i]
+        
+      # Run novelty detection framework
+      temp <- identify.novel.gam(site.sp.mat = mat, alpha = 0.05, metric = "bray", site = ID, plot = TRUE, plot.data = FALSE,
+                                    gam.max.k = -1)
+      i <<- i + 1
+      
+      # Remove first 5 bins
+      temp <- temp[-c(1:5),]
+           
+           
+   return(temp)
+   })
+
+  return(nov.mat)
+}
+
+nov.output<-novelty.detection.gam(matrix_list_seasonality)
+
+create.mod.frame <- function(novel.output){
+  big.df<-rbindlist(nov.output)
+
+  temp_df <- data.frame(do.call("rbind", strsplit(as.character(big.df$site), ".",
+                                     fixed = TRUE)))
+  big.df[,c("site")] <-NULL
+  names(temp_df) <- c("site", "Quarter")
+
+  return.frame<-cbind(temp_df, big.df)
+  return(return.frame)
+}
+
+create.mod.frame(nov.output)
 # Calculate novelty and return output in a list. No difference between Binary and Abundance data here except the similarity index used
 # (Jaccard for binary, Bray-Curtis for abundance). Just remember to use the correct matrices as input (list_A for abundance, list_B for binary).
 
@@ -152,14 +261,6 @@ saveRDS(GLM_lists_A, "./outputs/GLM_lists_A.rds")
 
 
 #### End of Novelty Detection
-
-
-
-
-
-
-
-
 
 
 # Estimate the transition probabilities

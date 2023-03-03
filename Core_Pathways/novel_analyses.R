@@ -124,32 +124,94 @@ full.ID.list <- do.call(c, lapply(countries.suf.data, function(country){
 
 full.stat.matrices <- assign.stat.country_nn(full.ID.list) 
 
+full.stat.matrices.season <- assign.stat.country.V2(names(matrix_list_seasonality))
+
 ###############################################################
 #### Step 2. Computing invasive turnover metrics  #############
 ###############################################################
 
 # Computes certain ecological metrics of invaders and natives
 
-full.nnc.matrices <- mat.nnc.ass(full.stat.matrices)
-
+full.nnc.matrices <- mat.nnc.ass(full.stat.matrices.season)
+full.nnc.matrices.season <- mat.nnc.ass.V2(full.stat.matrices.season)
 ###############################################################
 #### Step 3. Building a frame containing community metrics ####
 ###############################################################
 
-# This function creates a all-encompassing data frame f
+# This function creates a all-encompassing data frame for
 # suitable for use in modelling 
 
 full.novel.mat <- inv.frame.builder(full.nnc.matrices)
+full.novel.mat.season <- inv.frame.builder.V2(full.nnc.matrices.season)
 
+temp_df <- data.frame(do.call("rbind", strsplit(as.character(full.novel.mat.season$site), ".",
+                                                fixed = TRUE)))
+
+names(temp_df) <- c("site_ID", "Quarter")
+
+full.novel.mat.season<-cbind(temp_df, full.novel.mat.season)
 ###########################################################################
 #### Step 4. Modelling emergence of novelty by invasives turnover #########
 ###########################################################################
+
+# Create a df that excludes post-novel communities as this will bias the result.
+# We are only interested in the first part
+temp_list<-NULL
+for (site.ID in unique(full.novel.mat.season$site)){
+  print(site.ID)
+  temp<-subset(full.novel.mat.season, site == site.ID)
+  if(any(temp$cat == 'novel')){
+   index <- which(temp$cat =='novel')[1]
+   temp<- temp[1:index,]
+  }
+  else{
+    temp<-temp
+  }
+  temp_list <- c(temp_list, list(temp))
+
+}
+inv.df<-rbindlist(temp_list)
+
+
+
 
 # This function runs GLMM's for the invasives-novelty investigations. If plot = T,
 # Additional plots of the invader effect on novelty probability are saved. 
 # CSV's with model output are simultaneously created
 
 inv.models <- inv.nov.glmm(full.novel.mat, plot = T)
+
+
+inv.2 <- subset(full.novel.mat.season, country == "FRA" )
+full.novel.mat.season$test <- abs(full.novel.mat.season$INC_spec_increase)
+inv.df$position <- scale(inv.df$position, center = T, scale = T)
+inv.df$bin_lag <- scale(inv.df$bin_lag, center = T, scale = T)
+inv.df$INC_increase <- scale(inv.df$INC_increase, center = T, scale = T)
+inv.df$INC <- scale(inv.df$INC, center = T, scale = T)
+inv.df$NAC <- scale(inv.df$NAC, center = T, scale = T)
+
+mod<-glm(novel~position+bin_lag+test,
+            data =full.novel.mat.season , family ="binomial")
+
+mod<-glm(novel~position+bin_lag+INC_spec+NNC_spec+NAC_spec,
+         data =full.nov.no.lag, family ="binomial")
+
+
+
+
+summary(mod)
+
+visreg(mod.list[[1]], 'BioRealm' ,scale = 'response', rug=F, ylim = c(0,1))
+visreg(mod.INV, 'INC_increase' ,scale = 'response', rug=F, ylim = c(0,1))
+visreg(environ.driver.mod, 'Anthromod' ,scale = 'response', rug=F, ylim = c(0,.2))
+
+points(novel ~Anthromod , data =geo.timeseries.full, pch=19, col = alpha('black', alpha=0.4), cex=1)
+
+
+# Random allocation of species as a null model
+
+
+
 
 #################################################################
 #### Step 5. Investigating Novelty Persistence  #################
@@ -167,43 +229,322 @@ inv.models <- inv.nov.glmm(full.novel.mat, plot = T)
 # that are in fact quite different from the novel community (i.e. on their way back to a pre-novel state)
 # in the post-novel group.
 
-# Isolate novelty matrices
-matrices <- lapply(Fish_Communities_A$BioRealm_Matrices_A[], 
-                   function(x){
- 
-   indices <- names(x) %in% subset(full.novel.mat, cat == "novel")$site
-  
-   return(x[indices])
-})
 
-# Execute ANOSIM method 
-novelty.lengths <- do.call(c, 
-                           lapply(1:5, function(x){
-                             
-  novelty.lengths <- novel.length.algo(matrices[[x]])
-  
-}))
+# Filter matrices where novelty occurred
+test<-full.novel.mat.season$site[which(full.novel.mat.season$cat == 'novel')]
+nov.matrices<-matrix_list_seasonality[full.novel.mat.season$site[which(full.novel.mat.season$cat == 'novel')]]
+
+# Run persistence framework
+
+novelty.pers <- do.call(c, 
+                        sapply(1:length(nov.matrices), function(x){
+                          print(x)
+                          nov.cluster.id.V6(nov.matrices[x])
+                          
+                        })) 
 
 # Add the calculated lengths to our main data frame
-full.novel.mat$novel.length <- NA
-full.novel.mat$novel.class <- NA
+full.novel.mat.season$novel.length <- NA
+full.novel.mat.season$novel.class <- NA
 
-for(i in 1:length(novelty.lengths)){
-  indices <- which(full.novel.mat$site == novelty.lengths[[i]]$Simulation & full.novel.mat$cat == "novel")[1]
-  full.novel.mat$novel.length[indices] <- novelty.lengths[[i]]$Length_years
-  full.novel.mat$novel.class[indices] <-  novelty.lengths[[i]]$Class
+for(i in 1:length(novelty.pers)){
+  indices <- which(full.novel.mat.season$site_ID == novelty.pers[[i]][[1]]$ID & full.novel.mat.season$cat == "novel")
+  if(length(indices)> 1){
+   indices<- which(full.novel.mat.season$site_ID == novelty.pers[[i]][[1]]$ID & full.novel.mat.season$cat == "novel" & full.novel.mat.season$bins == novelty.pers[[i]][[1]]$begin)
+  }
+  
+  full.novel.mat.season$novel.length[indices] <- novelty.pers[[i]][[1]]$length 
+  full.novel.mat.season$novel.class[indices] <-  novelty.pers[[i]][[1]]$Class
   
 }
 
 # Set non-novel lengths to 0 instead of NA
-full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
-full.novel.mat$novel.class[is.na(full.novel.mat$novel.class)] <- "NONE"
+full.novel.mat.season$novel.length[is.na(full.novel.mat.season$novel.length)] <- 0
+full.novel.mat.season$novel.class[is.na(full.novel.mat.season$novel.class)] <- "NONE"
+
+### Investigate percentage of timeseries spent in novel state post-emergence ###
+# This looks at the proportion of a time series spent in a novel state post-emergence
+proportion.persistence.calculator <- function(full.novel.mat){
+  
+  nov.duration.df <- c('site'=c(NULL), 'proportion' = c(NULL))
+  for (site2 in unique(subset(full.novel.mat, cat =='novel')$site)){
+    print(site2)
+    test <- subset(full.novel.mat, site == site2)
+    
+    nov.ind<-which(test$cat == 'novel')[1]
+    nov.pos<-test$bins[nov.ind]
+    nov.end.pos<-nov.pos-test$novel.length[nov.ind]
+    end.pos <- test$bins[nrow(test)]
+    
+    nov.proportion<-(nov.pos-nov.end.pos)/(nov.pos-end.pos)
+
+    nov.duration.df$site <- c(nov.duration.df$site, site2)
+    nov.duration.df$proportion <- c(nov.duration.df$proportion, nov.proportion)
+      
+    }
+    
+  return(as.data.frame(nov.duration.df))
+}
+
+persistence.length.df <- proportion.persistence.calculator(full.novel.mat)
+
+full.novel.mat$persistence.proportion <- NA
+for(i in 1:nrow(persistence.length.df)){
+  print(i)
+ indices<-which(full.novel.mat$site == persistence.length.df$site[i])
+ full.novel.mat$persistence.proportion[indices] <- persistence.length.df$proportion[i]
+}
+
+for(i in 1:nrow(full.novel.mat)){
+  if(full.novel.mat$novel.class[i] == "BLIP"){
+    full.novel.mat$persistence.proportion[i] <- 0
+  }
+}
+
+##############################################################################
+### Step 6. Understanding lag and missing data with respect to persistence ###
+##############################################################################
+
+# We wish to understand the role of missing data on the persistence classification
+# of the novel community (i.e. longer lag, more likely to be blip?)
+
+# Add a new feature representing the lag between the novel community T and the 
+# succeeding community T + 1.
+
+full.novel.mat$lag_to_next <- NA
+
+# Compute the lags for each community (slightly different to earlier defined bin lag variable)
+for (site.ID in unique(full.novel.mat$site)){
+  print(site.ID)
+  temp <- subset(full.novel.mat, site == site.ID)
+  indices <- which(full.novel.mat$site == temp$site)
+  for (i in 1:nrow(temp)){
+    temp$lag_to_next[i] <- abs(temp$bins[i+1] - temp$bins[i])
+  }
+  full.novel.mat$lag_to_next[indices] <- temp$lag_to_next
+}
+
+# Define the model
+lag.mod.data <- subset(full.novel.mat, novel.class != "END" & novel.class != "NONE" )
+lag.mod <- glm(novel.class.binary~lag_to_next, data = lag.mod.data, family = 'binomial')
+
+data.2<- subset(full.novel.mat.test, novel.class != "Persister")
+visreg(immig.mod, 'transition', scale = "response", partial = F, rug = F, ylim = c(0,.5),
+       ylab = 'persistence type (0 = blip, 1 = persistent)', xlab = 'lag between novel and succeeding community (years)')
+points(novel.class.binary~lag_to_next, data = lag.mod.data, pch=19, col = alpha('black', alpha=0.4), cex=1)
+
+hist(lag.mod.data$lag_to_next, xlim = c(0,15), xlab  = 'lag between novel and succeeding bin', main = '')
+
+nrow(subset(full.novel.mat,lag_to_next < 3 & cat =='novel'))
+##########################################################
+### Step 7. Varying Tau for persistence classification ###
+##########################################################
+
+# Convert the novel length in years to a time bin value 
+# (doing this here as it was not part of original analysis)
+full.novel.mat$novel.length.bins <- 0
+
+for (site.ID in unique(subset(full.novel.mat, cat == "novel" & novel.class == 'Persister')$site)){
+  print(site.ID)
+  temp <- subset(full.novel.mat, site == site.ID)
+  indices <- which(full.novel.mat$site == temp$site)
+  nov.ind <- which(temp$cat == 'novel')[1]
+  
+  end.bin <- temp$bins[nov.ind] - temp$novel.length[nov.ind]
+  end <- temp$position[which(temp$bins == end.bin)]
+  start <- temp$position[nov.ind]
+  
+  novel.length.bin <- end-start
+  
+  full.novel.mat$novel.length.bins[which(full.novel.mat$cat == 'novel' & full.novel.mat$site == site.ID)] <- novel.length.bin
+  
+}
+
+# Now create a new classification for each level of Tau
+
+# Probably turn this into an apply function of sorts,
+# just tricky with the separate dataframe dependency.
+
+tau = 3
+full.novel.mat$class.T3 <- NA
+
+for (i in 1:nrow(full.novel.mat)){
+  print(i)
+  if(full.novel.mat$novel.class[i] == "BLIP"){
+    full.novel.mat$class.T3[i] <- "BLIP"
+  }
+  if(full.novel.mat$novel.class[i] == "NONE"){
+    full.novel.mat$class.T3[i] <- "NONE"
+  }
+  if(full.novel.mat$novel.class[i] == "END"){
+    full.novel.mat$class.T3[i] <- "END"
+  }
+  if(full.novel.mat$novel.class[i] == "Persister"){
+    if(full.novel.mat$novel.length.bins[i] > tau){
+      full.novel.mat$class.T3[i] <- "Persister"
+    }else{
+      full.novel.mat$class.T3[i] <- "BLIP"
+    }
+  }
+}
+
+
+######################################################################
+### Step 8. Model persister probability as an effect of demography ###
+######################################################################
+
+# Binary classification of persistent (1) versus blips (0)
+for (i in 1:nrow(full.novel.mat)){
+  print(i)
+  if(full.novel.mat$novel.class[i] == 'Persister'){
+    full.novel.mat$novel.class.binary[i] <- 1
+  }
+  else{
+    full.novel.mat$novel.class.binary[i] <- 0
+  }
+}
+
+# Model the effect of origination, extinction and invaders on probability of persistent or not.
+data.nov=subset(full.novel.mat,novel.class != 'END'& novel.class != 'NONE')
+data.nov$shannon.d <- scale(data.nov$shannon.d , center = T, scale = T)
+data.nov$orig <- scale(data.nov$orig , center = T, scale = T)
+data.nov$ext <- scale(data.nov$ext , center = T, scale = T)
+
+persistent.trajectory.mod<- glm(novel.class.binary~orig+ext+shannon.d , data=data.nov, family = 'binomial')
+
+summary(persistent.trajectory.mod)
+
+# Plot invader effect holding all else equal
+demo.persistent.plots <- function(mod){
+  layout(matrix(1:2, nrow=1))
+
+  par(mar=c(4,4,2,0.5))
+  visreg(mod, 'orig', scale='response', partial=F, rug=F, 
+         bty='l', xlab = 'Local Originations during Emergence', ylab = 'Persistence Probability of Novel Community',
+         points = list(col='black'), line = list(col = 'green'), ylim = c(0,1), axes=F)
+  axis(side = 1)
+  axis(side = 2)
+  points(novel.class.binary~orig, data = data.nov, pch=19, col = alpha('black', alpha=0.6), cex=0.4)
+  box()
+  mtext("c)", side = 3, line=0.5, adj = c(-4,0))
+ 
+
+  par(mar=c(4,0.5,2,4))
+  visreg(mod, 'ext', scale='response', partial=F, rug=F, 
+         bty='l', xlab = 'Local Extinctions during Emergence', ylab = 'Persistence Probability of Novel Community',
+         points = list(col='black'), line = list(col = 'red'), ylim = c(0,1), axes=F)
+
+  axis(side = 4)
+  axis(side = 1)
+  points(novel.class.binary~ext, data = data.nov, pch=19, col = alpha('black', alpha=0.6), cex=0.4)
+  box()
+  mtext("d)", side = 3, line=0.5, adj = c(-4,0))
+
+}
+
+
+demo.persistent.plots(persistent.trajectory.mod)
+
+
+### Zero inflated alternative model ####
+summary(zeroinfl(novel.class.binary~orig+ext+shannon.d +orig, data=data.nov))
+
+
+# Alternatively fit a glmm with cbind binary variable
+
+full.novel.mat$all_comm <- paste0(full.novel.mat$cat, "-", full.novel.mat$novel.class)
+full.novel.mat$bin_to_end <- full.novel.mat$total.n - full.novel.mat$position
+
+data.nov=subset(full.novel.mat, novel.class != 'END')
+mod<-(glmer(cbind(ext, (diversity.previous)) ~ all_comm+ bin_lag+bin_to_end+ (1|basin), data=data.nov, family = 'binomial'))
+mod<- glm(cbind(orig, (diversity.next)) ~ all_comm +bin_lag+ (position), data=data.nov, family = 'binomial')
+
+visreg(mod, c('all_comm'), scale='response', partial=F, rug=F, 
+       bty='l', xlab = 'Local Originations during Emergence', ylab = 'Persistence Probability of Novel Community',
+       points = list(col='black'), line = list(col = 'green'), ylim = c(0,.15), axes=T)
+
+
+#############################################
+### Inspecting seasonality  #################
+#############################################
+
+
+
+
+
+#### End of Main Analyses ####
+
+
+#############################################
+### Modelling distance after emergence ######
+#############################################
+
+matrix_test <- matrices[[1]][["G7715"]]
+
+cluster.assigner <- function(matrix_test, label_frame){
+  if(!any(label_frame$cat == 'novel')){
+    matrix_test$cluster_type <- 'non.novel'
+  }else{
+    test<-simprof(data = matrix_test, num.expected = 1000, undef.zero = TRUE,
+                  num.simulated = 999, method.distance =vegdist, 
+                  method.cluster = "average", alpha=0.05)
+    
+    names.vec <- unlist(list(test$significantclusters))
+    new.vec <- NULL
+    for(i in 1:length(names.vec)){
+      for(j in 1:length(test$significantclusters)){
+        if (names.vec[i] %in% test$significantclusters[[j]]){
+          new.vec[i] <- j
+          names(new.vec)[i] <- names.vec[i]
+        }
+      }
+    }
+    sorted.index <- as.character(sort(as.numeric(names(new.vec)), decreasing  =T))
+    new.vec <- new.vec[sorted.index]
+    matrix_test$cluster <- new.vec
+    nov.bin<-label_frame$bins[which(label_frame$cat == 'novel')][1]
+    matrix_test$cluster[which(rownames(matrix_test) == nov.bin)]
+    nov.cluster <- matrix_test$cluster[which(rownames(matrix_test) == nov.bin)]
+    clus.list<- NULL
+    matrix_test$cluster_type <- "pre.novel"
+
+    for(i in 1:nrow(matrix_test)){
+      if(matrix_test$cluster[i] != nov.cluster & nov.cluster %!in% clus.list){
+        matrix_test$cluster_type[i] <- 'pre.novel'
+        clus.list <- c(clus.list,matrix_test$cluster[i])
+      }
+      if(matrix_test$cluster[i] %!in% clus.list & matrix_test$cluster[i] != nov.cluster & nov.cluster %in% clus.list){
+        matrix_test$cluster_type[i] <- 'post.novel'
+      }
+      if(matrix_test$cluster[i] == nov.cluster){
+        matrix_test$cluster_type[i] <- 'novel'
+        clus.list <- c(clus.list,matrix_test$cluster[i])
+      }
+  
+    }
+  }
+  return(matrix_test$cluster_type)
+}
+
+
+cluster.assigner(matrix, label_frame) 
+
+
+
+
+
+
+
+
+
 
 
 
 ################################################
-#### Step 6. Analyzing state-level metrics ####
+#### Step X. Analyzing state-level metrics ####
 ###############################################
+
+### deprecated ###
 
 # Determination of lengths allows us to look at characteristics of the novel state as it evolves.
 # We have an unbiased method that tells us when the state ends, so we know what it "novel" and
@@ -214,6 +555,8 @@ full.novel.mat$novel.class[is.na(full.novel.mat$novel.class)] <- "NONE"
 # biological metrics aggregated at distinct periods within each time frame.
 
 # NEED TO UPDATE THIS UNFINISHED PER 16-06-2022
+# 11/08/22 still need to update this function
+# to reflect changes in length calculatror.
 
 nov.comm.summary <- novel.comm.analyzer(full.novel.mat)
 
@@ -261,13 +604,10 @@ is.sequential <- function(x){
   all(diff(x) == diff(x)[1])
 }
 
-
 # want to change this to maybe all the communities
 # anyhow, persistence should be just that - no subcategories
 
-
-
-nov.cluster.id <- function(matrix){
+nov.cluster.id.V1 <- function(matrix){
 
   # Identify novelty in time series
   ID <- strsplit(names(matrix), "[.]" )[[1]][2]
@@ -471,175 +811,512 @@ nov.cluster.id <- function(matrix){
  
 }
 
-# Check if overarching groups are significant (PART OF nov.cluster.id)
-
-# Need to make some iterations which test that groups are composed of significant subgroups
-# rather than mixed.
-
-test$significantclusters
+# Updating this such that all communities are considered, makes more sense.
+# Also include hclust check
 
 
-# Execute persistence clustering over all novel time series
-# Need to correct for inability to cluster some..
+nov.cluster.id.V2 <- function(matrix){
+  
+  # Identify novelty in time series
+  ID <- strsplit(names(matrix), "[.]" )[[1]][2]
+  matrix <- matrix[[1]]
+  number.names <- as.numeric(rownames(matrix))
+  
+  
+  label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                        alpha = 0.05,
+                                        metric = "bray",
+                                        plot =F, 
+                                        site = ID,
+                                        plot.data = FALSE,
+                                        gam.max.k = -1)
+  
+  
+  
+  #### Pre-processing Module ####
+  
+  if(as.numeric(rownames(matrix))[nrow(matrix)] <  as.numeric(rownames(matrix))[1]){
+    
+    # Flip such that orientation is correct 
+    for(i in 1:length(matrix)){
+      matrix[,i] <- rev(matrix[,i])
+    }
+    rownames(matrix) <- rev(rownames(matrix))
+  }
+  
+  # Assign "background" state to first 5  bins
+  
+  for (i in (nrow(matrix)):(nrow(matrix)-4)) {
+    rownames(matrix)[i] <- paste0("back-", rownames(matrix)[i])
+    
+  }
+  
+  # Assign actual states to the remaining bins, based on NDF
+  
+  for (i in 1:(dim(matrix)[1]-5)) {
+    for (j in 1:(dim(label_frame)[1])) {
+      
+      if ((rownames(matrix)[i]) == (label_frame$bins)[j]){
+        
+        rownames(matrix)[i] <- paste0(label_frame$cat[j], "-", 
+                                      rownames(matrix)[i])
+      }
+      
+    } 
+  } 
+  
+  
+  # Obtain novel index from the data
+  
+  novel_frame <- matrix %>% dplyr::filter(str_detect(rownames(matrix), "novel"))
+  novel_frame <- novel_frame[1,]
+  
+  # Find year and row data
+  novel_bin <- as.numeric(strsplit(rownames(novel_frame), split = "-")[[1]][2])
+  
+  novel_index <- which(rownames(matrix) == paste0("novel-", novel_bin))
+  
+  # Run SIMPROF Routine on data matrix to identify multivariate structure of communities
+  matrix.temp <- matrix
+  rownames(matrix.temp) <- rev(number.names)
+  
+  # Sometimes using bray-curtis/czekanowski can lead to an error where there are 0
+  # columns after removing the first 5 rows. This is rare and is addressed by using
+  # euclidean distance for those cases instead
+  
+  test <- tryCatch(
+    simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+            num.simulated = 999, method.distance ="czekanoswki", 
+            method.cluster = "average", alpha=.05), 
+    error=function(e) {
+      simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+              num.simulated = 999, method.distance ="euclidean", 
+              method.cluster = "average", alpha=.05) })
+  
+  # Initialize parameters for the length calculations
+  run <- TRUE
+  no.clus <- 2 # always start on 2
+  
+  # Plot dendogram result
+  par(mfrow = c(1,1))
+  
+  # Use a TryCatch expression, as some structures will fail the SIMPROF hypothesis
+  # test. These are immediate blips.
+  tryCatch(simprof.plot(test), error=function(e) {
+    print("Blip Detected")
+    run <- FALSE
+    # This will activate the BLIP module and assign the correct 
+    # category
+    length <- 1
+    
+    # We will also plot the dendrogram, without SIMPROF coloration.
+    # Just a nice visualisation
+    dev.off()
+    clust.data<-(hclust(vegdist(matrix.temp), method = "average"))
+    par(mar = c(3,3,3,3))
+    plot(clust.data, hang=-1,
+         main = "Blip Dendrogram", xlab = "")
+  })
+  
+  # Start of the length calculation module
+  
+  while(run == TRUE){
+    
+    # Length counter module, reverse such that oldest is last
+    trajectory <- rev(cutree(test$hclust, k=no.clus))
+    
+    # Find group allocation
+    novel.group <- trajectory[[which(names(trajectory)==novel_bin)]]
+    
+    # Count consecutive length of novel group
+    novel.slice <- (which(trajectory == novel.group))
+    
+    # Find start and end points
+    extrema <- as.numeric(names(novel.slice)[c(1,length(novel.slice))])
+    
+    # Check that start corresponds to novel bin. If False,
+    # increase number of supersets to better reflect strutcture.
+    if(novel_bin != extrema[1]){
+      no.clus <- no.clus +1
+    }else{
+      
+      start <- extrema[1]
+      
+      # Check that numbers are sequential using custom 
+      # function 
+      
+      if(is.sequential(novel.slice)){
+        end <- extrema[2]
+      }
+      
+      # If not sequential, adjust the end year accordingly
+      else{
+        bool.vec <- diff(novel.slice) == 1
+        index <- which(bool.vec == FALSE)[1] - 1
+        # correct for 0 index during blips
+        end <- ifelse(index > 0,as.numeric(names(bool.vec[index])),novel_bin)
+      }
+      
+      # Calculate Length
+      length <- start-end
+      
+      # Solve for blips, as we want to set the time in years, 
+      # not timebins
+      if(length == 0){
+        length <- 1
+      }
+      run <- FALSE
+    }
 
-unlisted.mat <- unlist(matrices, recursive = F)
-
-novelty.pers <- do.call(c, 
-                           lapply(1:length(unlisted.mat), function(x){
-                             print(x)
-                             nov.cluster.id(unlisted.mat[x])
-                             
-                           }))
-
-# Add the calculated lengths to our main data frame
-full.novel.mat$novel.length <- NA
-full.novel.mat$novel.class <- NA
-
-for(i in 1:length(novelty.pers)){
-  indices <- which(full.novel.mat$site == novelty.pers[[i]]$ID & full.novel.mat$cat == "novel")[1]
-  full.novel.mat$novel.length[indices] <- novelty.pers[[i]]$length # need to fix end point comm.
-  full.novel.mat$novel.class[indices] <-  novelty.pers[[i]]$Class
+  }
+  
+  # Initialize a class variable
+  Class <- "NONE"
+  
+  # Allocate blips
+  if(length == 1){
+    
+    Class <- "BLIP"
+    end <- as.numeric(rownames(matrix.temp[novel_index-1,]))
+    length <- novel_bin - end
+  }
+  
+  # Test for full persistence
+  if(Class != "BLIP"){
+    
+    index.vector <- which(names(novel.slice) %in% names(trajectory[novel.slice[1]:length(trajectory)]))
+    
+    if (length(trajectory[novel.slice[1]:length(trajectory)]) == length(index.vector)){
+      
+      Class <- "Full Persistence"
+    }
+  }
+  # Rest are short persisters
+  if(Class != "BLIP" & Class != "Full Persistence"){
+    
+    Class <- "Short Persistence"
+    
+  }
+  
+  if(novel_bin == number.names[length(number.names)]){
+    Class <- "END"
+    length <- 0
+  }
+  
+  
+  
+  
+  # Return data
+  return.data <- list(c(list("ID" = ID, "begin" =start, 
+                             "end" =end, "length"= length, 
+                             "Class" = Class, "clusters" =no.clus)))
+  names(return.data) <- ID
+  return(return.data)
   
 }
 
-# Set non-novel lengths to 0 instead of NA
-full.novel.mat$novel.length[is.na(full.novel.mat$novel.length)] <- 0
-full.novel.mat$novel.class[is.na(full.novel.mat$novel.class)] <- "NONE"
 
+# WORK BACK FROM CLUSTER NO. INSTEAD OF COUNTING UP!!!
+# That way, we can guarantee signifivance of groups in 
+# a nicer fashion. 
 
-hist(subset(full.novel.mat, novel.class != "NONE" & novel.class != "BLIP" & novel.class != "END")$novel.length)
+# Think about the stopping criterion...
 
-
-
-# Plot NMDS next to Dendrogram
-
-mds.cluster.plotter <- function(matrix){
+nov.cluster.id.V3 <- function(matrix){
   
-  # Set plotting params
-  par(mfrow = c(1,2))
+  # Identify novelty in time series
+  ID <- strsplit(names(matrix), "[.]" )[[1]][2]
+  matrix <- matrix[[1]]
+  number.names <- as.numeric(rownames(matrix))
   
   
+  label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                        alpha = 0.05,
+                                        metric = "bray",
+                                        plot =F, 
+                                        site = ID,
+                                        plot.data = FALSE,
+                                        gam.max.k = -1)
   
   
-  # Extract labels
-  label <- identify.novel.gam.MDS(site.sp.mat = matrix, 
-                                  alpha = 0.05,
-                                  metric = "bray",
-                                  plot = F, 
-                                  site = "NA",
-                                  plot.data = FALSE,
-                                  gam.max.k = -1)
   
-  matrix$category <- label$cat
-  matrix$colour <- NA
+  #### Pre-processing Module ####
   
-  # Assign colours
-  for (i in 1:nrow(matrix)) {
-    if(matrix$category[i] == "cumul"){
-      matrix$colour[i] <- "skyblue"
+  if(as.numeric(rownames(matrix))[nrow(matrix)] <  as.numeric(rownames(matrix))[1]){
+    
+    # Flip such that orientation is correct 
+    for(i in 1:length(matrix)){
+      matrix[,i] <- rev(matrix[,i])
     }
-    if(matrix$category[i] == "instant"){
-      matrix$colour[i] <- "red1"
-    }
-    if(matrix$category[i] == "novel"){
-      matrix$colour[i] <- "orange"
-    }
-    if(matrix$category[i] == "back"){
-      (matrix$colour[i] <- "grey")}
+    rownames(matrix) <- rev(rownames(matrix))
   }
   
-  # Run MDS 
-  NMDS=metaMDS(matrix[,-c(ncol(matrix), (ncol(matrix)-1))], 
-               k=2, trymax = 10000)
-  plot(NMDS, type = "n", ylab = "MDS2", xlab = "MDS1")
-  points(x = NMDS$points[,"MDS1"], 
-         y = NMDS$points[, "MDS2"], 
-         bg = matrix$colour,
-         pch = 21,
-         col = "black",
-         cex = 1.4)
+  # Assign "background" state to first 5  bins
   
-  for (i in 1:(nrow(NMDS$points)-1)){
+  for (i in (nrow(matrix)):(nrow(matrix)-4)) {
+    rownames(matrix)[i] <- paste0("back-", rownames(matrix)[i])
     
-    arrows(x0 = NMDS$points[i,"MDS1"], 
-           y0 = NMDS$points[i, "MDS2"], 
-           x1 = NMDS$points[i+1,"MDS1"], 
-           y1 = NMDS$points[i+1, "MDS2"], length = 0.05, lwd = 1)
   }
   
-  print("Clustering")
+  # Assign actual states to the remaining bins, based on NDF
   
-  test <- simprof(data = matrix[,-c(ncol(matrix), (ncol(matrix)-1))], num.expected = 1000,
-                  num.simulated = 999, method.distance ="czekanowski", 
-                  method.cluster = "average"
-                  ,alpha=0.05, undef.zero = T)
+  for (i in 1:(dim(matrix)[1]-5)) {
+    for (j in 1:(dim(label_frame)[1])) {
+      
+      if ((rownames(matrix)[i]) == (label_frame$bins)[j]){
+        
+        rownames(matrix)[i] <- paste0(label_frame$cat[j], "-", 
+                                      rownames(matrix)[i])
+      }
+      
+    } 
+  } 
   
-  temp <- simprof.plot(test, plot = F)
   
-  dendro.col.df <- data.frame(labels = as.numeric(labels(temp)))
-  dendro.col.df$colour <- NA
-  dendro.col.df$cat <- NA
-
-  for(i in 1:nrow(dendro.col.df)){
+  # Obtain novel index from the data
+  
+  novel_frame <- matrix %>% dplyr::filter(str_detect(rownames(matrix), "novel"))
+  if(nrow(novel_frame) > 1){
+    novel_frame <- novel_frame[2,]
+  }else{
+    novel_frame <- novel_frame[1,]
+  }
+  # Find year and row data
+  novel_bin <<- as.numeric(strsplit(rownames(novel_frame), split = "-")[[1]][2])
+  
+  novel_index <- which(rownames(matrix) == paste0("novel-", novel_bin))
+  
+  # Run SIMPROF Routine on data matrix to identify multivariate structure of communities
+  matrix.temp <- matrix
+  rownames(matrix.temp) <- rev(number.names)
+  
+  # Sometimes using bray-curtis/czekanowski can lead to an error where there are 0
+  # columns after removing the first 5 rows. This is rare and is addressed by using
+  # euclidean distance for those cases instead
+  
+  test <<- tryCatch(
+    simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+            num.simulated = 999, method.distance ="czekanowski", 
+            method.cluster = "average", alpha=.01), 
+    error=function(e) {
+      simprof(data = matrix.temp, num.expected = 1000, undef.zero = TRUE,
+              num.simulated = 999, method.distance ="euclidean", 
+              method.cluster = "average", alpha=.01) })
+  
+  # Initialize parameters for the length calculations
+  # Initialize a class variable
+  length <- 0
+  Class <- "NONE"
+  run <- FALSE
+  # Plot dendogram result
+  par(mfrow = c(1,1))
+  
+  # Use a TryCatch expression, as some structures will fail the SIMPROF hypothesis
+  # test. These are immediate blips.
+  tryCatch(simprof.plot(test), error=function(e) {
+    print("Blip Detected")
+    run <<- TRUE
     
-    index <- which(as.numeric(label$bins) == dendro.col.df$labels[i])
-    dendro.col.df$cat[i] <- label$cat[index]
-    
-    if(dendro.col.df$cat[i] == "cumul"){
-      dendro.col.df$colour[i] <- "skyblue"
-    }
-    if(dendro.col.df$cat[i] == "instant"){
-      dendro.col.df$colour[i] <- "red1"
-    }
-    if(dendro.col.df$cat[i] == "novel"){
-      dendro.col.df$colour[i] <- "orange"
-    }
-    if(dendro.col.df$cat[i] == "back"){
-      dendro.col.df$colour[i] <- "grey"}
+    # We will also plot the dendrogram, without SIMPROF coloration.
+    # Just a nice visualisation
+    dev.off()
+    clust.data<-(hclust(vegdist(matrix.temp), method = "average"))
+    par(mar = c(3,3,3,3))
+    plot(clust.data, hang=-1,
+         main = "Blip Dendrogram", xlab = "")
+  })
+  
+  # This will activate the BLIP module and assign the correct 
+  # category
+  if(run){
+    length <- 1
+    start <- novel_bin
+    end <- novel_bin
+    Class <- "BLIP"
   }
   
-  # Plot the Dendrogram
+  
+  # Start of the length calculation module
+  if(length == 0){
+    
+    length.output<-length.calculator(test,novel_bin)
+  
+    length <- length.output$length 
+    start <- length.output$start
+    end <- length.output$end
+  }
+  # Initialize a class variable
+  
+  
+  # Allocate blips needs to be done!!!
+  if(start == end | length == 1){
+    
+   Class <- "BLIP"
+    
  
-  labels_colors(temp) <- dendro.col.df$colour
+  }
   
-  labels(temp) <- paste0(dendro.col.df$cat, "-", dendro.col.df$labels)
+  # Test for full persistence
+  if(Class != "BLIP"){
+    
+    Class <- "Persister"
+    
+  }
   
-  plot(temp, ylab = "Height")
+  if(novel_bin == number.names[length(number.names)]){
+    Class <- "END"
+    length <- 0
+  }
+  
+  
+  
+  
+  # Return data
+  return.data <- list(c(list("ID" = ID, "begin" =start, 
+                             "end" =end, "length"= length, 
+                             "Class" = Class, "clusters" =no.clus)))
+  names(return.data) <- ID
+  return(return.data)
   
 }
 
-pdf(file = "/Plots/clustering_persistence.pdf",
-    width = 12,
-    height = 6)
-
-mds.cluster.plotter(matrices[[1]][[295]])
-dev.off()
 
 
-matrices[[1]][295]
+nov.cluster.id.V3(unlisted.mat['palearctic_mat_A.G10145'])
+
+
+
+
+# get structure
+length.calculator <- function(test, novel_bin){
+
+  # Extract all dendrogram labels
+  names.vec <- unlist(list(test$significantclusters))
+
+  # Construct a new named vector with communities assigned to significant clusters
+  new.vec <- NULL
+  for(i in 1:length(names.vec)){
+    for(j in 1:length(test$significantclusters)){
+      if (names.vec[i] %in% test$significantclusters[[j]]){
+        new.vec[i] <- j
+        names(new.vec)[i] <- names.vec[i]
+      }
+    }
+  }
+
+  # Ensure community labels are sorted in descending order.
+  # Use to reorder the cluster vector.
+  sorted.index <- as.character(sort(as.numeric(names(new.vec)), decreasing  =T))
+  new.vec <- new.vec[sorted.index]
+
+  # Extract the vector index for the novel community
+  novel_bin_index <- which(names(new.vec) == novel_bin)
+
+
+  # Important part. If there are more than 3 significant clusters,
+  # cut the Dendrogram into 3 groups as we are just interested in 
+  # broad "before", "during" and "after" novelty groups. If there's
+  # only 2 significant clusters than we just take the 2.
+  cut.length <- ifelse(length(test$significantclusters) >= 3, 3, 
+                     ifelse(length(test$significantclusters) == 2, 2, NA))
+  #need to work
+  if(is.na(cut.length)){
+    return(list("length" = 1, "start" = novel_bin,
+              "end" = names(new.vec[novel_bin_index+1])))
+  }
+  # Cut the dendrogram 
+  cut.vec <- rev(cutree(test$hclust, k = cut.length))
+  
+  # Establish "before", "during" and "after" groupings
+  group.relations <- vector(mode="list",length=cut.length)
+
+  for(i in 1:length(new.vec)){
+  
+    group.relations[[as.numeric(cut.vec[i])]] <- c(group.relations[[as.numeric(cut.vec[i])]], new.vec[i] )
+  
+  }
+
+  # Ensure lsit entries are just unique indices, not double ones
+  unique.group.rel <- lapply(group.relations, FUN = unique)
+
+  # Extract the novel group
+  group.novel<-new.vec[[novel_bin_index]]
+
+  # Find the group of communities the novel compositin belongs to.
+  for(i in 1:length(unique.group.rel)){
+    if(group.novel %in% unique.group.rel[[i]]){
+      group.no <- i
+    }
+  }
+
+  # Loop through the vector of clusters to find the start and end of the
+  # novel composition
+  start <- novel_bin
+  end <- NULL
+  
+  for(i in 1:length(new.vec)){
+
+    # This reads as: If we bump into a non-novel cluster after having
+    # already passed the novel community, then the novel state has ended.
+    if(new.vec[i] %!in% unique.group.rel[[group.no]] & as.numeric(names(new.vec)[i]) < start){
+      end <- as.numeric(names(new.vec)[i-1])
+      break
+    }
+    
+    # If we dont meet these requirements, the novel community doesn't end
+    if(is.null(end)){
+      end <- as.numeric(names(new.vec)[length(new.vec)])
+    }
+  
+  }
+  
+  # Correct for novel communities at very end
+  
+  if(novel_bin == as.numeric(names(new.vec[length(new.vec)]))){
+    end <- novel_bin
+  }
+  
+  
+  # Persistence length is simply the start of the novel state until we 
+  # enter something significantly different.
+  length <- start-end
+
+  return(list("length" = length,
+              "start" = start,
+              "end" = end))
+}
+
+# These new groups can simply be used to calculate length!
+length.calculator(test, novel_bin)
+
+
+
+identify.novel.gam(unlisted.mat[4])
+
 blip <- 0
-full <- 0
-short <- 0
-for(i in 1:length(novelty.pers)){
+pers <- 0
+end <- 0
+for(i in (novelty.pers.V3)){
   
-  if(novelty.pers[[i]]$Class == "BLIP"){
-    blip = blip + 1
+  if(i$Class == "BLIP"){
+    blip = blip +1
     
   }
-  if(novelty.pers[[i]]$Class == "Short Persistence"){
-    short = short + 1
+  if(i$Class == "Persister"){
+    pers = pers +1
     
   }
-  if(novelty.pers[[i]]$Class == "Full Persistence"){
-    full = full + 1
+  if(i$Class == "END"){
+    end = end +1
     
   }
-  
 }
-
-full/503
-short/503
 blip/503
+pers/503
+end
+
+
+
 ####################################
 ### Step X. Sensitivity Analyses ###
 ####################################
@@ -973,8 +1650,21 @@ dev.off()
 
 
 
+require(devtools)
+install_version("clustsig", version = "1.1", repos = "http://cran.us.r-project.org")
+
+mod<-glm(novel~BioRealm, data = full.novel.mat.season, family = 'binomial')
+summary(mod)
 
 
+
+types <- NA
+for (site in full.novel.mat.season$site_ID){
+  index<- which(Survey_Data$TimeSeriesID == site)
+  types <- c(unique(Survey_Data$UnitAbundance[index]), types)
+}
+  
+unique(types)
 
 
 

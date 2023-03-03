@@ -6,7 +6,7 @@ novel.probability <- function(novelty_list){
   
   # capture novel frequency for all taxa in list 
   novel.ts.freq <- do.call("rbind", 
-                           lapply(1:5, function(n){
+                           lapply(5, function(n){
                              
                              x <- novelty_list[[n]]
                              

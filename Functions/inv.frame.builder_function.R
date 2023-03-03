@@ -8,7 +8,7 @@ inv.frame.builder <- function(converted_matrix_list){
     
     matrix_1 <- converted_matrix_list[[ID]]
     
-    if(is.na(matrix_1)){
+    if(any(is.na(matrix_1))){
       return(NA)
     }
     
@@ -79,16 +79,21 @@ inv.frame.builder <- function(converted_matrix_list){
     matrix_1$position <- 0
     matrix_1$bin_lag <- label_frame$bin.lag
     matrix_1$country <- 0
+    matrix_1$Latitude <- 0
+    matrix_1$Longitude <- 0
     matrix_1$novel <- label_frame$novel + 0
     matrix_1$instant <- label_frame$instant + 0
     matrix_1$cumul <- label_frame$cumul + 0
+    matrix_1$total.n <- label_frame$n
     
-    
-    
+
     # evenness
     
     even.vector <- NULL
     shannon.vector <- NULL
+    diversity.vector <- NULL
+    diversity.prev.vector <- NA
+    diversity.next.vector <- NULL
     for (i in 1:nrow(matrix)){
       # Get number of species
       n.sp <- ncol(matrix[,matrix[i,] > 0, drop = F])
@@ -96,11 +101,19 @@ inv.frame.builder <- function(converted_matrix_list){
       add.s <- diversity(matrix[i,], index = "shannon")
       even.vector <- c(even.vector, add)
       shannon.vector <- c(shannon.vector, add.s)
+      diversity.vector<- c(diversity.vector, n.sp)
+      diversity.prev.vector <- c(diversity.prev.vector, n.sp)
+      diversity.next.vector <- c(diversity.next.vector, n.sp)
     }
+    
+    
+    diversity.next.vector <- c(diversity.next.vector, NA)
     
     matrix_1$evenness <- even.vector
     matrix_1$shannon.d <- shannon.vector
-    
+    matrix_1$diversity <- diversity.vector
+    matrix_1$diversity.previous <- diversity.prev.vector[-length(diversity.prev.vector)]
+    matrix_1$diversity.next <- diversity.next.vector[-1]
 
     
     # HydroBasin
@@ -109,6 +122,15 @@ inv.frame.builder <- function(converted_matrix_list){
         matrix_1$basin <- time_series_data$HydroBasin[i]
       }
     }
+    
+    # Lat and Long
+    for (i in 1:nrow(time_series_data)){
+      if (n.ID == time_series_data$TimeSeriesID[i]){
+        matrix_1$Latitude <- time_series_data$Latitude[i]
+        matrix_1$Longitude <- time_series_data$Longitude[i]
+      }
+    }
+    
     
     # Country 
     for (i in 1:nrow(time_series_data)){
@@ -190,9 +212,10 @@ inv.frame.builder <- function(converted_matrix_list){
     
     # Remove species
     matrix_1 <- matrix_1[, c("cat", "site", "position", 
-                             "bin_lag", "basin", "NNC", 
+                             "bin_lag", "basin", "Longitude", "Latitude", "NNC", 
                              "NNC_increase", "NAC", "NAC_increase", "INC", "INC_increase", 
-                             "bins", "novel", "instant", "cumul", "country", "evenness", "orig", "ext", "shannon.d")]
+                             "bins", "novel", "instant", "cumul", "country", "evenness", "orig", "ext", "shannon.d", 'diversity', 'diversity.previous', 'diversity.next',
+                             'total.n')]
   
     return(matrix_1)
     
@@ -245,3 +268,142 @@ inv.frame.builder <- function(converted_matrix_list){
 
 # extra little trick
 `%!in%` = Negate(`%in%`)
+
+
+
+
+
+# Incorporates seasonality
+inv.frame.builder.V2 <- function(converted_matrix_list){
+  
+  list_mat <- lapply(names(converted_matrix_list), function(ID){
+  
+    matrix_1 <- converted_matrix_list[[ID]]
+  
+    n.ID <- strsplit(as.character(ID), ".",
+                     fixed = TRUE)[[1]][1]
+    quarter.ID <-strsplit(as.character(ID), ".",
+                          fixed = TRUE)[[1]][2]
+    
+    print(ID)
+    
+    # Lets label!
+    matrix <- matrix_list_seasonality[[ID]]
+    label_frame <- identify.novel.gam(matrix, 
+                                        alpha = 0.05,
+                                        metric = "bray",
+                                        plot = F, 
+                                        site = ID,
+                                        plot.data = FALSE,
+                                        gam.max.k = -1)
+    
+    
+    
+    matrix_1$cat <- label_frame$cat
+    matrix_1$site <- ID
+    matrix_1$position <- 0
+    matrix_1$bin_lag <- label_frame$bin.lag
+    matrix_1$country <- 0
+    matrix_1$Latitude <- 0
+    matrix_1$Longitude <- 0
+    matrix_1$novel <- label_frame$novel + 0
+    matrix_1$instant <- label_frame$instant + 0
+    matrix_1$cumul <- label_frame$cumul + 0
+    matrix_1$total.n <- label_frame$n
+    matrix_1$BioRealm <- NA
+    
+    
+    # evenness
+    
+    even.vector <- NULL
+    shannon.vector <- NULL
+    diversity.vector <- NULL
+    diversity.prev.vector <- NA
+    diversity.next.vector <- NULL
+    for (i in 1:nrow(matrix)){
+      # Get number of species
+      n.sp <- ncol(matrix[,matrix[i,] > 0, drop = F])
+      add <- diversity(matrix[i,], index = "shannon")/log(n.sp)
+      add.s <- diversity(matrix[i,], index = "shannon")
+      even.vector <- c(even.vector, add)
+      shannon.vector <- c(shannon.vector, add.s)
+    }
+    
+    
+    diversity.next.vector <- c(diversity.next.vector, NA)
+    
+    matrix_1$evenness <- even.vector
+    matrix_1$shannon.d <- shannon.vector
+ 
+   
+    # Country 
+    for (i in 1:nrow(time_series_data)){
+      if (n.ID == time_series_data$TimeSeriesID[i]){
+        matrix_1$country <- time_series_data$Country[i]
+        matrix_1$BioRealm <- time_series_data$BioRealm[i]
+      }
+    }
+    
+    for(i in 1:nrow(matrix_1)){
+      matrix_1$position[i] <- i
+    }
+    
+    # Lat and Long
+    for (i in 1:nrow(time_series_data)){
+      if (n.ID == time_series_data$TimeSeriesID[i]){
+        matrix_1$Latitude <- time_series_data$Latitude[i]
+        matrix_1$Longitude <- time_series_data$Longitude[i]
+      }
+    }
+    
+  
+    
+    # HydroBasin
+    for (i in 1:nrow(time_series_data)){
+      if (n.ID == time_series_data$TimeSeriesID[i]){
+        matrix_1$basin <- time_series_data$HydroBasin[i]
+      }
+    }
+    
+    
+  
+    # Remove first 5 as these are biased
+    matrix_1 <- matrix_1[-(1:5),] 
+    
+    # Remove species
+    matrix_1 <- matrix_1[, c("cat", "site", "position", 
+                             "bin_lag","BioRealm","basin","Longitude", "Latitude", "NNC", 
+                             "NNC_increase","NNC_spec","NNC_spec_increase", "NAC", "NAC_increase","NAC_spec","NAC_spec_increase", "INC", "INC_increase", "INC_spec", "INC_spec_increase", 
+                             "bins", "novel", "instant", "cumul", "country", "evenness", "shannon.d",
+                             'total.n')]
+    
+    return(matrix_1)
+    
+  })
+  
+  list_mat_2 <- list_mat[!is.na(list_mat)]
+  
+  list_mat_2 <- rbindlist(list_mat_2)
+  
+ 
+  
+  # center all features
+  
+  #list_mat_2$NNC <- scale(list_mat_2$NNC, center = T, scale = T)
+  #list_mat_2$NNC_increase <- scale(list_mat_2$NNC_increase, center = T, scale = T)
+  #list_mat_2$NAC <- scale(list_mat_2$NAC, center = T, scale = T)
+  #list_mat_2$NAC_increase <- scale(list_mat_2$NAC_increase, center = T, scale = T)
+  #list_mat_2$INC <- scale(list_mat_2$INC, center = T, scale = T)
+  #list_mat_2$INC_increase <- scale(list_mat_2$INC_increase, center = T, scale = T)
+  #list_mat_2$bin_lag <- scale(as.numeric(list_mat_2$bin_lag, center = T, scale = T ))
+  #list_mat_2$position <- scale(list_mat_2$position, center = T, scale = T)
+  #list_mat_2$evenness <- scale(list_mat_2$evenness, center = T, scale = T)
+  #list_mat_2$orig <- scale(list_mat_2$orig, center = T, scale = T)
+  #list_mat_2$ext <- scale(list_mat_2$ext, center = T, scale = T)
+  #list_mat_2$shannon.d <- scale(list_mat_2$shannon.d, center = T, scale = T)
+
+  list_mat_2$site <- as.factor(list_mat_2$site)
+  list_mat_2[is.na(list_mat_2)] <- 0
+  
+  return(list_mat_2)
+}
