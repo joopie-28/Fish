@@ -9,6 +9,7 @@ create_basin_TS <- function(time_series_data){
     lay_NA = sort(ogrListLayers("/Users/sassen/Desktop/hybas_na_lev01-12_v1c"))[Hydro_Level]
     lay_AUS = sort(ogrListLayers("/Users/sassen/Desktop/hybas_au_lev01-12_v1c"))[Hydro_Level]
     lay_ASI = sort(ogrListLayers("/Users/sassen/Desktop/hybas_as_lev01-12_v1c"))[Hydro_Level]
+    lay_SA = sort(ogrListLayers("/Users/sassen/Desktop/hybas_sa_lev01-12_v1c"))[Hydro_Level] 
     
     # Combine all regions
     world_Basin_Level <- rbind(st_read(dsn = "/Users/sassen/Desktop/hybas_eu_lev01-12_v1c", 
@@ -18,7 +19,9 @@ create_basin_TS <- function(time_series_data){
                                st_read(dsn = "/Users/sassen/Desktop/hybas_au_lev01-12_v1c", 
                                        layer = lay_AUS),
                                st_read(dsn = "/Users/sassen/Desktop/hybas_as_lev01-12_v1c", 
-                                       layer = lay_ASI))
+                                       layer = lay_ASI),
+                               st_read(dsn = "/Users/sassen/Desktop/hybas_sa_lev01-12_v1c", 
+                                       layer = lay_SA))
     
     # Create a new spatial data frame with hydrobasin ID codes
     
@@ -46,4 +49,3 @@ create_basin_TS <- function(time_series_data){
 }
 
 
-HYBAS_scheme <- create_basin_TS(time_series_data)

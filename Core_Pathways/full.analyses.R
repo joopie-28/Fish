@@ -54,22 +54,6 @@ rm(exotic.list)
 time_series_data <- read.csv("inputs/1873_2_RivFishTIME_TimeseriesTable.csv")
 Survey_Data <- read.csv("inputs/1873_2_RivFishTIME_SurveyTable.csv")
 
-# Import environmental data
-
-# Population
-pop.data <- raster("/Users/sassen/Desktop/Fish_GeoData/gpw-v4-population-density-rev11_2015_1_deg_tif/gpw_v4_population_density_rev11_2015_1_deg.tif")
-
-# Human modification of the environment
-anthromod.data <- raster("/Users/sassen/Desktop/Fish_GeoData/lulc-human-modification-terrestrial-systems-geographic-geotiff/lulc-human-modification-terrestrial-systems_geographic.tif")
-
-# Surface temperature data 1981-2014
-surface.temp.brick <- brick("/Users/sassen/Desktop/waterTemperature_monthly_1981-2014.nc")
-
-# Water flow data 1979-2014
-surface.flow.brick <- brick("/Users/sassen/Desktop/discharge_Global_monthly_1979-2014.nc")
-
-
-
 # Load CRS
 WG84 <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0" 
 
@@ -129,15 +113,21 @@ nov.matrices <- matrix_list_seasonality[full.novel.mat.season$site[which(full.no
 # different at alpha = 0.05.
 
 novelty.pers <- do.call(c, 
-                        lapply(1:length(nov.matrices), function(x){
-                          print(x)
-                          nov.cluster.id.V6(nov.matrices[x])
-                          
+                        lapply(1:length(nov.matrices), function(m){
+                          print(m)
+                          nov.cluster.id.V7(nov.matrices[m],
+                                            method_clus = 'single',
+                                            alpha_clust = 0.05)
                         })) 
 
 # Write the results back into our main data frame.
 full.novel.mat.season$novel.length <- NA
 full.novel.mat.season$novel.class <- NA
+full.novel.mat.season$consistency <- NA
+full.novel.mat.season$median_seq_dis <- NA
+full.novel.mat.season$median_cum_dis <- NA
+full.novel.mat.season$nspp <- NA
+full.novel.mat.season$FirstPostNov <- NA
 
 for(i in 1:length(novelty.pers)){
   indices <- which(full.novel.mat.season$site == names(novelty.pers[[i]][1]) & full.novel.mat.season$cat == "novel")
@@ -145,15 +135,22 @@ for(i in 1:length(novelty.pers)){
     indices<- which(full.novel.mat.season$site == names(novelty.pers[[i]][1]) & full.novel.mat.season$cat == "novel" & full.novel.mat.season$bins == novelty.pers[[i]][[1]]$begin)
   }
   
-  full.novel.mat.season$novel.length[indices] <- novelty.pers[[i]][[1]]$length 
-  full.novel.mat.season$novel.class[indices] <-  novelty.pers[[i]][[1]]$Class
-  
-}
+  full.novel.mat.season$consistency[indices] <- novelty.pers[[i]][[1]]$consistency
+  if(novelty.pers[[i]][[1]]$consistency){
+    full.novel.mat.season$novel.length[indices] <- novelty.pers[[i]][[1]]$length.bins
+    full.novel.mat.season$novel.class[indices] <-  novelty.pers[[i]][[1]]$Class
+    full.novel.mat.season$median_seq_dis[indices] <- novelty.pers[[i]][[1]]$median_seq_dis
+    full.novel.mat.season$median_cum_dis[indices] <- novelty.pers[[i]][[1]]$median_cum_dis
+    full.novel.mat.season$nspp[indices] <- novelty.pers[[i]][[1]]$nspp
+    full.novel.mat.season$FirstPostNov[indices] <- novelty.pers[[i]][[1]]$FirstPostNov
+  }}
+
+
 
 # Set non-novel lengths to 0 instead of NA
 full.novel.mat.season$novel.length[is.na(full.novel.mat.season$novel.length)] <- 0
 full.novel.mat.season$novel.class[is.na(full.novel.mat.season$novel.class)] <- "NONE"
-
+full.novel.mat.season$novel.class <- as.factor(full.novel.mat.season$novel.class)
 
 #### Pre-processing 6. Computing demographic processes and how they relate to novelty ####
 
@@ -185,6 +182,7 @@ InvByBasin <- rbindlist(lapply(unique(time_series_data$HydroBasin),
 # Now need to add this on to the modelling data frame, probably with a join
 
 fullNovFrame_complete <- merge(full.novel.mat.season, InvByBasin, by=c("basin","bins"))
+
 #### Pre-processing 8. Importing and extracting environmental drivers at time series level #####
 
 # Extract all sites that had enough data to apply novelty detection
@@ -266,9 +264,17 @@ geo.timeseries.full <- cbind(geo.timeseries.sf,
     return(df)
   })))
 
+# Extract all pfafstetter codes at levels 1-12 from the HydroBasins dataset.
+# This is used for extracting environmental data at varying spatial scales
+# in later analyses.
+HYBAS_scheme <- create_basin_TS(time_series_data)
 
 # This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
-EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, 12, HYBAS_scheme)
+EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, HYBAS_scheme, c('HYBAS_ID','run_mm_syr',
+                                                                           'dis_m3_pyr', 'riv_tc_ssu',
+                                                                           'dor_pc_pva',
+                                                                           "crp_pc_sse", 'pst_pc_sse',
+                                                                           'pac_pc_sse', 'hft_ix_s09','ppd_pk_sav'))
 
 
 ###### PHASE 2 - MODELLING AND ANALYSES ######

@@ -749,6 +749,238 @@ nov.cluster.id.V6 <- function(matrix){
 }
 
 
+# V.7 includes a consistency test between NDF and SIMPROF
+
+nov.cluster.id.V7 <- function(matrix, method_clus, 
+                              alpha_clust){
+  
+  # Identify novelty in time series
+  ID <- strsplit(names(matrix), "[.]" )[[1]][1]
+  full.ID <- names(matrix)
+  matrix <- matrix[[1]]
+  
+  number.names <- as.numeric(rownames(matrix))
+  
+  label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                        alpha = 0.05,
+                                        metric = "bray",
+                                        plot =F, 
+                                        site = ID,
+                                        plot.data = FALSE,
+                                        gam.max.k = -1)
+  
+  # Find the average dissimilarities and matrix shapes
+  mean_cum <- median(label_frame$raw.min.dist, na.rm =T)
+  mean_inst <- median(label_frame$seq.dist, na.rm =T)
+  nspp <- ncol(matrix)
+  nyears <- nrow(matrix)
+  
+  #### Pre-processing Module ####
+  
+  if(as.numeric(rownames(matrix))[nrow(matrix)] <  as.numeric(rownames(matrix))[1]){
+    
+    # Flip such that orientation is correct 
+    for(i in 1:length(matrix)){
+      matrix[,i] <- rev(matrix[,i])
+    }
+    rownames(matrix) <- rev(rownames(matrix))
+  }
+  
+  # Assign "background" state to first 5  bins
+  
+  for (i in (nrow(matrix)):(nrow(matrix)-4)) {
+    rownames(matrix)[i] <- paste0("back-", rownames(matrix)[i])
+    
+  }
+  
+  # Assign actual states to the remaining bins, based on NDF
+  
+  for (i in 1:(dim(matrix)[1]-5)) {
+    for (j in 1:(dim(label_frame)[1])) {
+      
+      if ((rownames(matrix)[i]) == (label_frame$bins)[j]){
+        
+        rownames(matrix)[i] <- paste0(label_frame$cat[j], "-", 
+                                      rownames(matrix)[i])
+      }
+      
+    } 
+  } 
+  
+  
+  # Obtain novel index from the data
+  
+  novel_frame <- matrix %>% 
+    dplyr::filter(str_detect(rownames(matrix), "novel"))
+  
+  if(nrow(novel_frame) > 1){
+    iter.list <- c(1,2)
+    print('double event')
+  }else{
+    iter.list <- 1
+  }
+  
+  
+  return.dat <- lapply(iter.list, function(x){
+    # Find year and row data
+    novel_frame <- matrix %>% dplyr::filter(str_detect(rownames(matrix), "novel"))
+    novel_frame <- novel_frame[x,]    
+    
+    novel_bin <<- as.numeric(strsplit(rownames(novel_frame), split = "-")[[1]][2])
+    
+    novel_index <- which(rownames(matrix) == paste0("novel-", novel_bin))
+    
+    # Run SIMPROF Routine on data matrix to identify multivariate structure of communities
+    matrix.temp <- matrix
+    rownames(matrix.temp) <- rev(number.names)
+    
+    # Sometimes using bray-curtis/czekanowski can lead to an error where there are a 
+    # large number of zeroes in the data. We address this by ofsetting zeroes by 
+    # a small number.
+    
+    test <<- tryCatch(
+      simprof(data = matrix.temp, num.expected = 1000, undef.zero = T,
+              num.simulated = 999, method.distance =vegdist, 
+              method.cluster = method_clus, alpha=alpha_clust), 
+      error=function(e) {
+        print('ofsetting zeroes by small number')
+        
+        tryCatch(simprof(data = non_zero_offsetter(matrix.temp), num.expected = 1000, undef.zero = T,
+                         num.simulated = 999, method.distance =vegdist, 
+                         method.cluster = method_clus, alpha=alpha_clust),
+                 error=function(e){
+                   NULL
+                 })
+      })
+    
+    # Initialize parameters for the length calculations
+    # Initialize a class variable
+    
+    Class <- "NONE"
+    calc_length = T
+    # Plot dendogram result
+    par(mfrow = c(1,1))
+    
+    # If there is no support for significant clusters. We can not plot the dendrogram or 
+    # do any meaningful length calculations.
+    
+    return.data = tryCatch(simprof.plot(test),
+                           error = function(e){
+                             print(paste0("No non-random structure in data for alpha = ", alpha_clust))
+                             data_error <- list(c(list('consistency' = FALSE,
+                                                       'median_seq_dis' = mean_inst,
+                                                       'median_cum_dis' = mean_cum,
+                                                       'nspp' =nspp,
+                                                       'nbins'= nyears)))
+                             calc_length <<- F
+                             names(data_error) <- full.ID
+                             return(data_error)
+                           })
+    
+    
+    if(calc_length){
+      # Start of the length calculation module
+      
+      
+      length.output<-length.calculator.V2(test,novel_bin)
+      
+      length <- length.output$length 
+      start <- length.output$start
+      end <- length.output$end
+      
+      bin.start <- which(rev(number.names) == start)
+      bin.end <- which(rev(number.names) == end)
+      length.bins <- bin.start-bin.end
+      
+      
+      
+      # Initialize a class variable
+      
+      
+      # Allocate blips needs to be done!!!
+      if(start == end | length.bins == 1){
+        
+        Class <- "BLIP"
+        length <- 0
+        
+        
+      }
+      
+      # Test for full persistence
+      if(Class != "BLIP"){
+        
+        Class <- "Persister"
+        
+      }
+      
+      if(novel_bin == number.names[length(number.names)]){
+        Class <- "END"
+        length <- 0
+      }
+      
+      
+      ### Consistency module - is the novel community the start of a new cluster
+      clusters <- test$significantclusters
+      
+      # Find the novel cluster and confirm it is the head of its own cluster.
+      consistency <- FALSE
+      for (list_index in 1:length(clusters)){
+        if (novel_bin %in% as.numeric(clusters[[list_index]]) & 
+            novel_bin == max(as.numeric(clusters[[list_index]]))){
+          consistency <- TRUE
+        }
+      }
+      
+      ### Module for confirming to which cluster the post-novel communities 
+      # belong, but only possible if the novel comp ends before the ts.
+      
+      if(end != number.names[length(number.names)]){
+        cluster_vector = length.output$clustervec
+        postNov = cluster_vector[which(names(cluster_vector) == end)]
+        preNov_clus = cluster_vector[1:(which(names(cluster_vector) == novel_bin)-1)]
+        if(postNov %in% preNov_clus){
+          FirstPostNov = "Pre_Novel_State"
+        }else{
+          FirstPostNov = "New_exploratory_State"
+        }
+      }else{
+        FirstPostNov = NA
+      }
+      
+      # Return data in df
+      return.data <- list(c(list("ID" = ID, "begin" =start, 
+                                 "end" =end, "length"= length, 
+                                 "Class" = Class,
+                                 "length.bins" = length.bins,
+                                 'median_seq_dis' = mean_inst,
+                                 'median_cum_dis' = mean_cum,
+                                 'nspp' =nspp,
+                                 'nbins'= nyears,
+                                 'consistency' = consistency,
+                                 'FirstPostNov' = FirstPostNov)))
+      names(return.data) <- full.ID
+    }
+    return(return.data)
+  })
+  return(return.dat)
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

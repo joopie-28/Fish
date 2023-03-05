@@ -1,7 +1,7 @@
 # This function assigns invasive status to fish based on both basin
 # and country level data.
 
-status_assignment_function <- function(survey_ID, country){
+status_assignment_function.V1 <- function(survey_ID, country){
   
   if(country == "USA"){
     test_matrix <- Fish_Communities_A_ABS$BioRealm_Matrices_A_2$nearctic_mat_A[[survey_ID]]
@@ -152,7 +152,7 @@ status_assignment_function <- function(survey_ID, country){
 }
 
 
-status_assignment_no_nn_function <- function(survey_ID){
+status_assignment_no_nn_function.V1 <- function(survey_ID){
   
 
   # Identify the country
@@ -315,7 +315,7 @@ status_assignment_no_nn_function <- function(survey_ID){
 }
 
 
-status_assignment_all_equal_function <- function(survey_ID){
+status_assignment_all_equal_function.V1 <- function(survey_ID){
   
   # Identify the country
   country <- names(full.ID.list[match(survey_ID, full.ID.list)])
@@ -480,8 +480,8 @@ status_assignment.V2 <- function(survey_ID_full){
   test_matrix <- matrix_list_seasonality[[survey_ID_full]]
   
   if(country == "FRA"){
-    country_level <- france_country_level
-    invaders <- france_invaders
+    country_level <- fra_country_level
+    invaders <- fra_invaders
   }
   
   if(country == "GBR"){
@@ -499,14 +499,14 @@ status_assignment.V2 <- function(survey_ID_full){
   }
   
   if(country == "ESP"){
-    country_level <- spain_country_level
-    invaders <- spain_invaders
+    country_level <- esp_country_level
+    invaders <- esp_invaders
   }
   
   
   if(country == "FIN"){
-    country_level <- finland_country_level
-    invaders <- finland_invaders
+    country_level <- fin_country_level
+    invaders <- fin_invaders
   } 
   
   if(country == "AUS"){
@@ -520,8 +520,8 @@ status_assignment.V2 <- function(survey_ID_full){
   } 
   
   if(country == "CAN"){
-    country_level <- canada_country_level
-    invaders <- canada_invaders
+    country_level <- can_country_level
+    invaders <- can_invaders
   } 
   
   if(country == "HUN"){

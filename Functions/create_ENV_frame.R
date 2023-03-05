@@ -1,0 +1,27 @@
+# Function for creating a data frame with variables extracted from the HydroAtlas
+
+create_ENV_frame <- function(full.novel.mat.season, HYBAS_Level, HYBAS_scheme, variables_list){
+  
+  lay = ogrListLayers("/Users/sassen/Desktop/BasinATLAS_Data_v10.gdb/BasinATLAS_v10.gdb")[HYBAS_Level]
+  
+  # test
+  HydroAtlas_lev <- st_read(dsn = "/Users/sassen/Desktop/BasinATLAS_Data_v10.gdb/BasinATLAS_v10.gdb", 
+                             layer = lay)
+  
+  HydroAtlas_lev$HYBAS_ID <- as.factor(HydroAtlas_lev$HYBAS_ID)
+  
+  
+  HYBAS_sub <- HYBAS_scheme[, c(1, which(colnames(HYBAS_scheme) == paste0('HYBAS_ID_', HYBAS_Level)))]
+  HYBAS_sub[, 2] <- as.factor(HYBAS_sub[,2])
+  class.frame <- full.novel.mat.season |> 
+    rename('HYBAS_ID' = 'basin') |> 
+    left_join(HYBAS_sub, by = c("site_ID" = "TimeSeriesID")) |>
+    select(!"HYBAS_ID") |>
+    rename("HYBAS_ID" = paste0('HYBAS_ID_', HYBAS_Level)) |>
+    
+    left_join(as.data.frame(HydroAtlas_lev[,variables_list]), by = 'HYBAS_ID')
+
+  return(class.frame)
+}
+
+
