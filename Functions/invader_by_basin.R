@@ -32,7 +32,7 @@ countInv_By_Basin <- function(time_series_data, basin){
   invader_by_basin <- ifelse(basin.mat[,] > 0, 1, 0) |>
     as.data.frame() |>
     # only do this if we have countries with invaders
-    select(colnames(basin.mat)[colnames(basin.mat) %in% invader_list$Species]) |>
+    dplyr::select(colnames(basin.mat)[colnames(basin.mat) %in% invader_list$Species]) |>
     rowSums() |>
     as.data.frame() |>
     mutate(Basin = basin,

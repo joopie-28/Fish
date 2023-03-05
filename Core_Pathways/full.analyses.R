@@ -26,7 +26,8 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "stringi", "tinytex", "knitr",
                  "sjPlot", "rworldmap", "ggeffects", 
                  "gridExtra", "clustsig", "dendextend",
-                 'betareg'))
+                 'betareg'
+                 ))
 
 
 
@@ -62,7 +63,7 @@ WG84 <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 #### Pre-processing 1. Construct community matrices and detect novelty ####
 
 # These are the countries with sufficient data for bin range = 1 year, skipping countries with
-# no usable time series saves us some time.
+# no usable time series saves us some redundant processing.
 
 countries.suf.data <- list("BEL", "BRA", "BWA", "CAN", "CIV", "COL", 
                            "ESP", "FIN", "FRA", "GBR", "HUN", "JPN", 
@@ -77,13 +78,15 @@ full.ID.list <- do.call(c, lapply(countries.suf.data, function(country){
 
 ID.list <- as.list(time_series_data$TimeSeriesID)
 
+# Store all matrices in a named list
 matrix_list_seasonality <- list_matrix_seasonality_function(ID.list)
 
-nov.output<-novelty.detection.gam(matrix_list_seasonality)
+# Apply the NDF to all matrices and store results in a new list
+nov.output <- novelty.detection.gam(matrix_list_seasonality)
 
 #### Pre-processing 2. Tag species as 'Invader', 'Non-native', or 'Native'####
 
-full.stat.matrices.season <- assign.stat.country.V2(names(matrix_list_seasonality))
+full.stat.matrices.season <- assign.stat.country.V2(names(matrix_list_seasonality)) # please check anguilla australis australis
 
 
 #### Pre-processing 3. Compute turnover metrics for each group of species ####
@@ -115,7 +118,7 @@ nov.matrices <- matrix_list_seasonality[full.novel.mat.season$site[which(full.no
 novelty.pers <- do.call(c, 
                         lapply(1:length(nov.matrices), function(m){
                           print(m)
-                          nov.cluster.id.V7(nov.matrices[m],
+                          nov.cluster.id.V7(nov.matrices[69],
                                             method_clus = 'single',
                                             alpha_clust = 0.05)
                         })) 
@@ -136,14 +139,14 @@ for(i in 1:length(novelty.pers)){
   }
   
   full.novel.mat.season$consistency[indices] <- novelty.pers[[i]][[1]]$consistency
-  if(novelty.pers[[i]][[1]]$consistency){
-    full.novel.mat.season$novel.length[indices] <- novelty.pers[[i]][[1]]$length.bins
-    full.novel.mat.season$novel.class[indices] <-  novelty.pers[[i]][[1]]$Class
-    full.novel.mat.season$median_seq_dis[indices] <- novelty.pers[[i]][[1]]$median_seq_dis
-    full.novel.mat.season$median_cum_dis[indices] <- novelty.pers[[i]][[1]]$median_cum_dis
-    full.novel.mat.season$nspp[indices] <- novelty.pers[[i]][[1]]$nspp
-    full.novel.mat.season$FirstPostNov[indices] <- novelty.pers[[i]][[1]]$FirstPostNov
-  }}
+  
+  full.novel.mat.season$novel.length[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$length.bins), NA, novelty.pers[[i]][[1]]$length.bins)
+  full.novel.mat.season$novel.class[indices] <-  ifelse(is.null(novelty.pers[[i]][[1]]$Class), NA, novelty.pers[[i]][[1]]$Class)
+  full.novel.mat.season$median_seq_dis[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$median_seq_dis), NA, novelty.pers[[i]][[1]]$median_seq_dis)
+  full.novel.mat.season$median_cum_dis[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$median_cum_dis), NA, novelty.pers[[i]][[1]]$median_cum_dis)
+  full.novel.mat.season$nspp[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$nspp), NA, novelty.pers[[i]][[1]]$nspp)
+  full.novel.mat.season$FirstPostNov[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$FirstPostNov), NA, novelty.pers[[i]][[1]]$FirstPostNov)
+}
 
 
 
@@ -181,88 +184,23 @@ InvByBasin <- rbindlist(lapply(unique(time_series_data$HydroBasin),
 
 # Now need to add this on to the modelling data frame, probably with a join
 
-fullNovFrame_complete <- merge(full.novel.mat.season, InvByBasin, by=c("basin","bins"))
+fullNovFrame_complete <- merge(full.novel.mat.season, 
+                               InvByBasin, by=c("basin","bins"))
+
+# Create a persistence frame for length modelling
+
+persistence_frame <- fullNovFrame_complete |>
+  filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
+  filter(consistency == T) |>
+  mutate(pers.proportion = ifelse(novel.class == 'Persister', novel.length/(total.n - position), 0)) |>
+  # Transform to satisfy beta regression
+  mutate(pers.prop.trans = (pers.proportion*(total.n - 1) + 0.5)/total.n,
+         pers_binary = ifelse(novel.class == 'Persister', 1, 0),
+         delta_spp = gain-loss,
+         prop_delta_spp = delta_spp/orig.rich)
+
 
 #### Pre-processing 8. Importing and extracting environmental drivers at time series level #####
-
-# Extract all sites that had enough data to apply novelty detection
-sites <- as.character(unique(full.novel.mat.season$site_ID))
-sites_quartered <- as.character(unique(full.novel.mat.season$site))
-
-environ.df <- data.frame('ID' = sites_quartered, 
-                         "Lat" = NA,
-                         "Long" = NA)
-
-# Cross-reference with survey data to obtain coordinates
-index <- which(time_series_data$TimeSeriesID %in% sites)
-
-# Find relevant data and convert to SF
-geo.timeseries <- time_series_data[index, c("TimeSeriesID", "Longitude", "Latitude")]
-
-# Account for seasonality
-
-for (i in 1:length(sites_quartered)){
-  temp_name <- strsplit(as.character(sites_quartered[i]), ".",
-                        fixed = TRUE)[[1]][1]
-  geo_index<-which(geo.timeseries == temp_name)
-  environ.df$Lat[i] <- geo.timeseries$Latitude[geo_index]
-  environ.df$Long[i] <- geo.timeseries$Longitude[geo_index]
-  environ.df$Site[i] <- geo.timeseries$TimeSeriesID[geo_index]
-  
-}
-
-# Spatial dataframe for modelling
-geo.timeseries.sf <- st_as_sf(environ.df, coords = c("Long", "Lat"), crs = WG84) 
-
-# Combine novelty data with environmental data in a spatial data frame.
-geo.timeseries.full <- cbind(geo.timeseries.sf, 
-                             rbindlist(lapply(geo.timeseries.sf$ID, 
-  function(site){
-    print(site)
-    # Add up all the novelty metrics for binomial model
-    back <- length(which(full.novel.mat.season$site == site & 
-                           full.novel.mat.season$cat == "back"))
-    
-    instant <- length(which(full.novel.mat.season$site == site & 
-                              full.novel.mat.season$cat == "instant"))
-    
-    cumul <- length(which(full.novel.mat.season$site == site & 
-                            full.novel.mat.season$cat == "cumul"))
-    
-    novel <- length(which(full.novel.mat.season$site == site & 
-                            full.novel.mat.season$cat == "novel"))
-    
-    # Include novelty classes based on persistence length for
-    # model variation.
-    if(novel > 0){
-      index <- (which(full.novel.mat.season$site == site & 
-                        full.novel.mat.season$cat == "novel"))[1]
-      print(index)
-      
-      novelty.class <- full.novel.mat.season[[index, "novel.class"]]
-    }
-    else{
-      novelty.class <- "NONE"
-    }
-    
-    # Add Mean invader increase in each time series
-    indices <- which(full.novel.mat.season$site== site)
-    
-    
-    Country <- full.novel.mat.season$country[indices][1]
-    BioRealm <- full.novel.mat.season$BioRealm[indices][1]
-    Basin <- full.novel.mat.season$basin[indices][1]
-    
-    # Add in total length of timeseries as a covariate
-    length <- back + instant + cumul +novel
-    
-    # Return a clean df for modelling
-    df <- data.frame("back" =back, "instant" = instant, 
-                     "cumul" = cumul, "novel"= novel, "length" = length, "Class" = novelty.class,
-                     "Country" = Country, 'BioRealm' = BioRealm, 
-                     'Basin' = Basin)
-    return(df)
-  })))
 
 # Extract all pfafstetter codes at levels 1-12 from the HydroBasins dataset.
 # This is used for extracting environmental data at varying spatial scales
@@ -270,7 +208,7 @@ geo.timeseries.full <- cbind(geo.timeseries.sf,
 HYBAS_scheme <- create_basin_TS(time_series_data)
 
 # This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
-EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, HYBAS_scheme, c('HYBAS_ID','run_mm_syr',
+EnviroByTS_L12 <- create_ENV_frame(fullNovFrame_complete, HYBAS_Level = 12, HYBAS_scheme, c('HYBAS_ID','run_mm_syr',
                                                                            'dis_m3_pyr', 'riv_tc_ssu',
                                                                            'dor_pc_pva',
                                                                            "crp_pc_sse", 'pst_pc_sse',
@@ -282,11 +220,11 @@ EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, HYBAS_
 #### Modelling 1. Rates of Novelty Emergence around the globe ####
 
 # Three separate models for each novelty type, at the community level
-fixed.emergence.nov.mod <- glmer(novel ~ bin_lag +position+ (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.nov.mod <- glmer(novel ~ bin_lag + position+ (1|site_ID/Quarter), data = full.novel.mat.season, family= 'binomial')
 
-fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag +position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
 
-fixed.emergence.instant.mod <- glmer(instant ~bin_lag +position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.instant.mod <- glmer(instant ~bin_lag + position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
 
 emergence.mod.list <- list(fixed.emergence.instant.mod, fixed.emergence.cumul.mod, fixed.emergence.nov.mod)
 
@@ -294,34 +232,28 @@ emergence.mod.list <- list(fixed.emergence.instant.mod, fixed.emergence.cumul.mo
 broad.emergence.mod <- glmer(binary_novel ~ (1|Country), data = geo.timeseries.full, family = 'binomial')
 
 
-#### Modelling 2. Modelling persistence ####
+#### Modelling 2. Modelling persistence length ####
 
-# We use a beta regression to model persistence proportion
+# We use a beta regression to model persistence proportion. We use the transformed data.
 
-betareg(pers.proportion ~ 1, data = class.frame)
+summary(betareg(pers.prop.trans ~ n.from.end +loss + gain +shannon.d + evenness + INC_increase*total_inv , 
+        data = persistence_frame))
+# or
+summary(glmmTMB(pers.prop.trans ~ n.from.end +loss + gain + evenness + INC_increase*total_inv + (1|site_ID/Quarter) , 
+        data = persistence_frame, family='beta_family'))
+# or
+summary(glm(novel.length ~ position+loss + gain + evenness + INC_increase*total_inv , 
+                data = persistence_frame, family='poisson'))
 
+#### Modelling 3. Drivers of emergence #####
 
+summary(glmer(novel~position+bin_lag + gain+loss +INC_increase*total_inv + (1|site_ID/Quarter), 
+              data = fullNovFrame_complete, family = 'binomial'))
 
-#### Modelling 3. Demographic Processes: Turnover during transitions #####
-
-# Extinction and Origination Models
-ext.mod <- glm(cbind(ext, (ext.rich-ext))~transition, data=full.novel.mat.season, family='binomial')
-orig.mod <- glm(cbind(orig, (orig.rich-orig))~transition, data=full.novel.mat.season, family='binomial')
-
-# Emigration and Immigration models
-emig.mod <- glm(cbind(emig, (ext.rich-emig))~transition , data=full.novel.mat.season, family='binomial')
-immig.mod <- glm(cbind(immig, (orig.rich-immig))~transition , data=full.novel.mat.season, family='binomial')
-
-# Full taxa loss and gain models
-loss.mod <- glm(cbind(loss, (ext.rich-loss))~transition , data=full.novel.mat.season, family='binomial')
-gain.mod <- glm(cbind(gain, (orig.rich-gain))~transition , data=full.novel.mat.season, family='binomial')
-
-
-
-#### Modelling 4. Correlation of human activity with Novelty ####
-
-environ.driver.mod <- glm(binary_novel~Anthromod+length, data= geo.timeseries.full, family = 'binomial')
-
+#### Modelling 4. Drivers of persistence #####
+# add environmntal 
+summary(glmer(pers_binary ~n.from.end +delta_spp+total_inv +(1|basin/site_ID/Quarter) , data = persistence_frame,
+    family = 'binomial'))
 
 
 ###### PHASE 3 - PRODUCING TABLES AND FIGURES ######
