@@ -10,6 +10,7 @@ create_basin_TS <- function(time_series_data){
     lay_AUS = sort(ogrListLayers("/Users/sassen/Desktop/hybas_au_lev01-12_v1c"))[Hydro_Level]
     lay_ASI = sort(ogrListLayers("/Users/sassen/Desktop/hybas_as_lev01-12_v1c"))[Hydro_Level]
     lay_SA = sort(ogrListLayers("/Users/sassen/Desktop/hybas_sa_lev01-12_v1c"))[Hydro_Level] 
+    lay_AF = sort(ogrListLayers("/Users/sassen/Desktop/hybas_af_lev01-12_v1c"))[Hydro_Level]
     
     # Combine all regions
     world_Basin_Level <- rbind(st_read(dsn = "/Users/sassen/Desktop/hybas_eu_lev01-12_v1c", 
@@ -21,10 +22,12 @@ create_basin_TS <- function(time_series_data){
                                st_read(dsn = "/Users/sassen/Desktop/hybas_as_lev01-12_v1c", 
                                        layer = lay_ASI),
                                st_read(dsn = "/Users/sassen/Desktop/hybas_sa_lev01-12_v1c", 
-                                       layer = lay_SA))
+                                       layer = lay_SA),
+                               st_read(dsn = "/Users/sassen/Desktop/hybas_af_lev01-12_v1c", 
+                                       layer = lay_AF))
     
     # Create a new spatial data frame with hydrobasin ID codes
-    
+   
     # planar geometries
     sf_use_s2(FALSE) 
     
@@ -36,7 +39,7 @@ create_basin_TS <- function(time_series_data){
       # find intersections with european hydrobasins
       st_intersection(world_Basin_Level) |>
       # select relevant columns
-      select('TimeSeriesID',
+      dplyr::select('TimeSeriesID',
              'HYBAS_ID') |>
       # Tidyverse needs some odd syntax for renaming using paste0()
       rename(!! paste0('HYBAS_ID_', Hydro_Level) := "HYBAS_ID")

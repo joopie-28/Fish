@@ -6,11 +6,12 @@ classify.compositions <- function(matrix, pers.data){
   begin<- which(matrix$bins == pers.data$begin)
   end<-which(matrix$bins == pers.data$end)
   
+  # BLIPS
   # Assign groups 
-  if(end < nrow(matrix)){
-    matrix$novel.groups[begin:(end-1)] <- 'Novel'
-  } else{
+  if(end == nrow(matrix)){
     matrix$novel.groups[begin:(end)] <- 'Novel'
+  } else{
+    matrix$novel.groups[begin:(end-1)] <- 'Novel'
   }
   
   prev.group <- "Non-Novel"
@@ -21,3 +22,5 @@ classify.compositions <- function(matrix, pers.data){
   
   return(matrix)
 }
+
+

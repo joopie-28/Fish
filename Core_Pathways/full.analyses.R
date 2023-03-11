@@ -65,7 +65,7 @@ WG84 <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 # These are the countries with sufficient data for bin range = 1 year, skipping countries with
 # no usable time series saves us some redundant processing.
 
-countries.suf.data <- list("BEL", "BRA", "BWA", "CAN", "CIV", "COL", 
+countries.suf.data <- list("BEL", "BRA", "CAN", "CIV", "COL", 
                            "ESP", "FIN", "FRA", "GBR", "HUN", "JPN", 
                            "SWE", "USA", "AUS")
 
@@ -118,7 +118,7 @@ nov.matrices <- matrix_list_seasonality[full.novel.mat.season$site[which(full.no
 novelty.pers <- do.call(c, 
                         lapply(1:length(nov.matrices), function(m){
                           print(m)
-                          nov.cluster.id.V7(nov.matrices[69],
+                          nov.cluster.id.V7(nov.matrices[m],
                                             method_clus = 'single',
                                             alpha_clust = 0.05)
                         })) 
@@ -207,12 +207,47 @@ persistence_frame <- fullNovFrame_complete |>
 # in later analyses.
 HYBAS_scheme <- create_basin_TS(time_series_data)
 
+environmental_variables = data.frame('Variable' = c("Natural_Discharge_Annual",
+                                                    "Land_Surface_Runoff_Annual",
+                                                    "Degree_Regulation",
+                                                    "River_Area",
+                                                    "Elevation",
+                                                    "Terrain_slope",
+                                                    "Stream_Gradient",
+                                                    "Aridity_Index",
+                                                    "Cropland_Extent",
+                                                    "Pasture_Extent",
+                                                    "Protected_Area_Extent",
+                                                    "Population_Density",
+                                                    "Urban_Extent",
+                                                    "Human_Footprint"),
+                                     'Code' = c('dis_m3_pyr',
+                                                "run_mm_syr",
+                                                "dor_pc_pva",
+                                                "ria_ha_ssu",
+                                                "ele_mt_sav",
+                                                "slp_dg_sav",
+                                                "sgr_dk_sav",
+                                                "ari_ix_sav",
+                                                "crp_pc_sse",
+                                                "pst_pc_sse",
+                                                "pac_pc_sse",
+                                                "ppd_pk_sav",
+                                                "urb_pc_sse",
+                                                "hft_ix_s09"))
+
+
+### By basin?
 # This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
-EnviroByTS_L12 <- create_ENV_frame(fullNovFrame_complete, HYBAS_Level = 12, HYBAS_scheme, c('HYBAS_ID','run_mm_syr',
-                                                                           'dis_m3_pyr', 'riv_tc_ssu',
-                                                                           'dor_pc_pva',
-                                                                           "crp_pc_sse", 'pst_pc_sse',
-                                                                           'pac_pc_sse', 'hft_ix_s09','ppd_pk_sav'))
+EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, 
+                                   HYBAS_scheme, environmental_variables$Code) |>
+  mutate("binary_novel" =  ifelse(novel > 0, 1, 0))
+
+summary(glm(binary_novel~dor_pc_pva , data = EnviroByTS_L12,
+    family = 'binomial'))
+
+
+
 
 
 ###### PHASE 2 - MODELLING AND ANALYSES ######
