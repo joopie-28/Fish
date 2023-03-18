@@ -26,12 +26,12 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "stringi", "tinytex", "knitr",
                  "sjPlot", "rworldmap", "ggeffects", 
                  "gridExtra", "clustsig", "dendextend",
-                 'betareg'
+                 'betareg', 'car'
                  ))
 
 
 
-# Load all the exotic species databases (constructed manually from literature)
+# Load all the exotic species databases (constructed from literature and fishbase)
 exotic.list <- sapply(list.files("./Exotics_databases_countries", pattern="\\.rds", full.names=TRUE), 
                       readRDS)
 
@@ -187,18 +187,6 @@ InvByBasin <- rbindlist(lapply(unique(time_series_data$HydroBasin),
 fullNovFrame_complete <- merge(full.novel.mat.season, 
                                InvByBasin, by=c("basin","bins"))
 
-# Create a persistence frame for length modelling
-
-persistence_frame <- fullNovFrame_complete |>
-  filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
-  filter(consistency == T) |>
-  mutate(pers.proportion = ifelse(novel.class == 'Persister', novel.length/(total.n - position), 0)) |>
-  # Transform to satisfy beta regression
-  mutate(pers.prop.trans = (pers.proportion*(total.n - 1) + 0.5)/total.n,
-         pers_binary = ifelse(novel.class == 'Persister', 1, 0),
-         delta_spp = gain-loss,
-         prop_delta_spp = delta_spp/orig.rich)
-
 
 #### Pre-processing 8. Importing and extracting environmental drivers at time series level #####
 
@@ -237,16 +225,218 @@ environmental_variables = data.frame('Variable' = c("Natural_Discharge_Annual",
                                                 "hft_ix_s09"))
 
 
-### By basin?
 # This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
 EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, 
                                    HYBAS_scheme, environmental_variables$Code) |>
   mutate("binary_novel" =  ifelse(novel > 0, 1, 0))
 
-summary(glm(binary_novel~dor_pc_pva , data = EnviroByTS_L12,
-    family = 'binomial'))
 
 
+
+### Pre-processing 9. 
+
+#### Pre-processing 9. Creating a site level base dataframe ####
+
+# Extract all sites that had enough data to apply novelty detection
+sites <- as.character(unique(fullNovFrame_complete$site_ID))
+sites_quartered <- as.character(unique(fullNovFrame_complete$site))
+
+environ.df <- data.frame('ID' = sites_quartered, 
+                         "Lat" = NA,
+                         "Long" = NA)
+
+# Cross-reference with survey data to obtain coordinates
+index <- which(time_series_data$TimeSeriesID %in% sites)
+
+# Find relevant data and convert to SF
+geo.timeseries <- time_series_data[index, c("TimeSeriesID", "Longitude", "Latitude")]
+
+# Account for seasonality
+
+for (i in 1:length(sites_quartered)){
+  temp_name <- strsplit(as.character(sites_quartered[i]), ".",
+                        fixed = TRUE)[[1]][1]
+  geo_index<-which(geo.timeseries == temp_name)
+  environ.df$Lat[i] <- geo.timeseries$Latitude[geo_index]
+  environ.df$Long[i] <- geo.timeseries$Longitude[geo_index]
+  environ.df$Site[i] <- geo.timeseries$TimeSeriesID[geo_index]
+  
+}
+
+# Spatial dataframe for modelling
+geo.timeseries.sf <- st_as_sf(environ.df, coords = c("Long", "Lat"), crs = WG84) 
+
+# Combine novelty data with environmental data in a spatial data frame.
+geo.timeseries.full <- cbind(geo.timeseries.sf, 
+                             rbindlist(lapply(geo.timeseries.sf$ID, 
+                                              function(site){
+                                                print(site)
+                                                # Add up all the novelty metrics for binomial model
+                                                back <- length(which(fullNovFrame_complete$site == site & 
+                                                                       fullNovFrame_complete$cat == "back"))
+                                                
+                                                instant <- length(which(fullNovFrame_complete$site == site & 
+                                                                          fullNovFrame_complete$cat == "instant"))
+                                                
+                                                cumul <- length(which(fullNovFrame_complete$site == site & 
+                                                                        fullNovFrame_complete$cat == "cumul"))
+                                                
+                                                novel <- length(which(fullNovFrame_complete$site == site & 
+                                                                        fullNovFrame_complete$cat == "novel"))
+                                                
+                                                # Include novelty classes based on persistence length for
+                                                # model variation.
+                                                if(novel > 0){
+                                                  index <- (which(fullNovFrame_complete$site == site & 
+                                                                    fullNovFrame_complete$cat == "novel"))[1]
+                                                  print(index)
+                                                  
+                                                  novelty.class <- fullNovFrame_complete[index, "novel.class"]
+                                                }
+                                                else{
+                                                  novelty.class <- "NONE"
+                                                }
+                                                
+                                                # Add some more variables
+                                                indices <- which(fullNovFrame_complete$site== site)
+                                                
+                                                
+                                                Country <- fullNovFrame_complete$country.x[indices][1]
+                                                BioRealm <- fullNovFrame_complete$BioRealm[indices][1]
+                                                Basin <- fullNovFrame_complete$basin[indices][1]
+                                                
+                                                # Add in total length of timeseries as a covariate
+                                                length <- back + instant + cumul +novel
+                                                
+                                                # Return a clean df for modelling
+                                                df <- data.frame("back" =back, "instant" = instant, 
+                                                                 "cumul" = cumul, "novel"= novel, "length" = length, "Class" = novelty.class,
+                                                                 "Country" = Country, 'BioRealm' = BioRealm, 
+                                                                 'Basin' = Basin)
+                                                return(df)
+                                              })))
+#### Pre-processing 10. Creating finished data frames for modelling at site and community level ####
+
+# Import spatial data for all relevant areas (HydroRivers database)
+RiverID_eu <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_eu_shp/HydroRIVERS_v10_eu_shp")
+RiverID_aus <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_au_shp/HydroRIVERS_v10_au_shp")
+RiverID_af <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af_shp")
+RiverID_sa <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_sa_shp/HydroRIVERS_v10_sa_shp")
+RiverID_na <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_na_shp/HydroRIVERS_v10_na_shp")
+RiverID_as <- st_read(dsn ="/Users/sassen/Desktop/HydroRIVERS_v10_as_shp/HydroRIVERS_v10_as_shp")
+
+# Extract relevant rivers from the HydroRivers database
+RiverID_Global <- rbindlist(list(RiverID_eu, RiverID_af, RiverID_as, 
+                                 RiverID_aus, RiverID_na, RiverID_sa))
+
+# This may take a while - we are working large volumes of spatial data.
+# a completed file can be found at './outputs/globalRivers_Extracted.rds'
+# and can be used for downstream analyses.
+
+globalRivers_Extracted <- rbindlist(lapply(countries.suf.data, function(country){
+  print(country)
+  ExtractRiverFromSurvey(EnviroByTS_L12, country, RiverID_Global)
+}))
+
+# This was a very intensive computation, due to the size of the HydroRiver Database,
+# so we will be saving the obejct in an .RDS file.
+
+saveRDS(globalRivers_Extracted, file = './outputs/globalRivers_Extracted.rds')
+
+
+# Now we need to import all the environmental variables.
+
+AUSRiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                         lay = "RiverATLAS_v10_au")
+EURiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                        lay = "RiverATLAS_v10_eu")
+NARiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                        lay = "RiverATLAS_v10_na")
+SANRiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                         lay = "RiverATLAS_v10_sa_north")
+SASRiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                         lay = "RiverATLAS_v10_sa_south")
+AFRiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                        lay = "RiverATLAS_v10_af")
+ASIRiver_Data <- st_read(dsn ="/Users/sassen/Desktop/RiverATLAS_Data_v10_shp/RiverATLAS_v10_shp",
+                         lay = "RiverATLAS_v10_as")
+
+# Declare our list of variables that we are interested in: doing this here saves some computing time.
+environmental_variables_river = data.frame('Variable' = c("Natural_Discharge_Annual",
+                                                          "Land_Surface_Runoff_Annual",
+                                                          "Degree_Regulation",
+                                                          "River_Area",
+                                                          "Elevation",
+                                                          "Terrain_slope",
+                                                          "Stream_Gradient",
+                                                          "Aridity_Index",
+                                                          "Cropland_Extent",
+                                                          "Pasture_Extent",
+                                                          "Protected_Area_Extent",
+                                                          "Population_Density",
+                                                          "Urban_Extent",
+                                                          "Human_Footprint"),
+                                           'Code' = c('dis_m3_pyr',
+                                                      "run_mm_cyr",
+                                                      "dor_pc_pva",
+                                                      "ria_ha_csu",
+                                                      "ele_mt_cav",
+                                                      "slp_dg_cav",
+                                                      "sgr_dk_rav",
+                                                      "ari_ix_cav",
+                                                      "crp_pc_cse",
+                                                      "pst_pc_cse",
+                                                      "pac_pc_cse",
+                                                      "ppd_pk_cav",
+                                                      "urb_pc_cse",
+                                                      "hft_ix_c09")) 
+
+# Create this massive list with all environmental variables for all possible rivers.
+data_list <- list(AUSRiver_Data, EURiver_Data, NARiver_Data , 
+                  SANRiver_Data, SASRiver_Data, AFRiver_Data,
+                  ASIRiver_Data)
+
+# Filter out rows and variables to create a workable amount of data
+for (i in 1:length(data_list)){
+  print(i)
+  data_list[[i]] <- data_list[[i]] |> 
+    select(c(1:14,environmental_variables_river$Code)) |>
+    filter(HYRIV_ID %in% globalRivers_Extracted$HYRIV_ID)
+}
+
+# Collate into a large dataframe and clean up.
+RiverData_Global <- rbindlist(data_list)
+rm(data_list)
+
+# Save it to the environemnt so we do not have to recompute these data.
+saveRDS(RiverData_Global, file = './outputs/RiverData_Global.rds')
+
+# Join all data, such that we have environmnetal variables
+# linked with a timeseries ID.
+MergedENV_by_RivID <- globalRivers_Extracted |>
+  left_join(RiverData_Global, by = 'HYRIV_ID') |>
+  rename(ID = site)
+
+# Join all environmental data to our time series 
+# data frame; at both site and community levels.
+
+# This is the site-level data frame
+FullGeoFrame <- geo.timeseries.full |>
+  left_join(MergedENV_by_RivID, by = ("ID")) |>
+  mutate(binary_novel = ifelse(novel > 0, 1, 0))|>
+  separate(ID, c('Site', 'Quarter'), remove = F)
+
+# This is the community-level data frame
+FullEnvFrame <- fullNovFrame_complete |>
+  rename(ID = site) |>
+  left_join(MergedENV_by_RivID, by = c('ID'))
+
+# This frame includes only novel communities and is used
+# for persistence length modelling
+PersistenceFrame <- FullEnvFrame|>
+  filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
+  filter(consistency == T) |>
+  mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0))
 
 
 
@@ -255,40 +445,50 @@ summary(glm(binary_novel~dor_pc_pva , data = EnviroByTS_L12,
 #### Modelling 1. Rates of Novelty Emergence around the globe ####
 
 # Three separate models for each novelty type, at the community level
-fixed.emergence.nov.mod <- glmer(novel ~ bin_lag + position+ (1|site_ID/Quarter), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.nov.mod <- glmer(novel ~ bin_lag + position+ (1|site_ID/Quarter), 
+                                 data = FullEnvFrame, family= 'binomial')
 
-fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site_ID), 
+                                   data = FullEnvFrame, family= 'binomial')
 
-fixed.emergence.instant.mod <- glmer(instant ~bin_lag + position + (1|Quarter/site_ID), data = full.novel.mat.season, family= 'binomial')
+fixed.emergence.instant.mod <- glmer(instant ~ bin_lag + position + (1|Quarter/site_ID), 
+                                     data = FullEnvFrame, family= 'binomial')
 
 emergence.mod.list <- list(fixed.emergence.instant.mod, fixed.emergence.cumul.mod, fixed.emergence.nov.mod)
 
 # One model at the time series level
-broad.emergence.mod <- glmer(binary_novel ~ (1|Country), data = geo.timeseries.full, family = 'binomial')
+broad.emergence.mod <- glmer(binary_novel ~ (1|Basin), 
+                             data = FullGeoFrame, family = 'binomial')
 
+#### Modelling 2. Modelling persistence length and chance of blip versus persistant state ####
 
-#### Modelling 2. Modelling persistence length ####
+# Simple poisson glm to understand the variables associated with persistence time.
+persLengthMod <- glm(novel.length ~ n.from.end +loss + gain + evenness + INC_increase+total_inv , 
+                data = PersistenceFrame, family='poisson')
 
-# We use a beta regression to model persistence proportion. We use the transformed data.
+# Intercept-only random effects model to get estimate for the proportion of persisters v non-persisters.
+summary(glmer(binary_pers ~ 1 + (1|site_ID/Quarter) , data = PersistenceFrame,
+              family = 'binomial'))
 
-summary(betareg(pers.prop.trans ~ n.from.end +loss + gain +shannon.d + evenness + INC_increase*total_inv , 
-        data = persistence_frame))
-# or
-summary(glmmTMB(pers.prop.trans ~ n.from.end +loss + gain + evenness + INC_increase*total_inv + (1|site_ID/Quarter) , 
-        data = persistence_frame, family='beta_family'))
-# or
-summary(glm(novel.length ~ position+loss + gain + evenness + INC_increase*total_inv , 
-                data = persistence_frame, family='poisson'))
+# Binomial regression to understand factors that contribute to whether or not a community persists at all.
+summary(glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarter) , data = PersistenceFrame,
+              family = 'binomial'))
 
 #### Modelling 3. Drivers of emergence #####
 
-summary(glmer(novel~position+bin_lag + gain+loss +INC_increase*total_inv + (1|site_ID/Quarter), 
-              data = fullNovFrame_complete, family = 'binomial'))
+# Binomial glm looking at community level emergence using ecological and environemntal variables
+summary(glmer(novel~position +bin_lag+ gain+loss+evenness +INC_increase*total_inv + (1|site_ID/Quarter), 
+              data = FullEnvFrame, family = 'binomial'))
 
-#### Modelling 4. Drivers of persistence #####
-# add environmntal 
-summary(glmer(pers_binary ~n.from.end +delta_spp+total_inv +(1|basin/site_ID/Quarter) , data = persistence_frame,
-    family = 'binomial'))
+# Binomial glm looking at site-level emergence proportions using only environmental variables,
+# essentially inspecting whether or characteristics of sites are associated with novelty.
+summary(glmer(binary_novel ~ (1|Quarter), 
+              data = FullGeoFrame, family = 'binomial'))
+
+
+
+###### PHASE 3 - MODEL DIAGNOSTICS WITH DHARMA AND VIF ######
+
 
 
 ###### PHASE 3 - PRODUCING TABLES AND FIGURES ######

@@ -83,7 +83,7 @@ environmental_variables_river = data.frame('Variable' = c("Natural_Discharge_Ann
                                                     "Population_Density",
                                                     "Urban_Extent",
                                                     "Human_Footprint"),
-                                     'Code' = c('dis_m3_pyr',
+                                           'Code' = c('dis_m3_pyr',
                                                 "run_mm_cyr",
                                                 "dor_pc_pva",
                                                 "ria_ha_csu",
@@ -118,7 +118,6 @@ rm(data_list)
 # Save it to the environemnt so we do not have to recompute these data.
 saveRDS(RiverData_Global, file = './outputs/RiverData_Global.rds')
 
-
 # Join all data, such that we have environmnetal variables
 # linked with a timeseries ID.
 MergedENV_by_RivID <- globalRivers_Extracted |>
@@ -126,19 +125,26 @@ MergedENV_by_RivID <- globalRivers_Extracted |>
   rename(ID = site)
 
 # Join all environmental data to our time series 
-# data frame
+# data frame; at both site and community levels.
 
-#FullEnvFrame <- geo.timeseries.full |>
-#  left_join(MergedENV_by_RivID, by = ("ID")) |>
-#  mutate(binary_novel = ifelse(novel > 0, 1, 0))
+# This is the site-level data frame
+FullGeoFrame <- geo.timeseries.full |>
+  left_join(MergedENV_by_RivID, by = ("ID")) |>
+  mutate(binary_novel = ifelse(novel > 0, 1, 0))|>
+  separate(ID, c('Site', 'Quarter'), remove = F)
 
-# or an alternative using multi-level modelling
+# This is the community-level data frame
 FullEnvFrame <- fullNovFrame_complete |>
   rename(ID = site) |>
   left_join(MergedENV_by_RivID, by = c('ID'))
 
-# The newly created file can be used for modelling the effect of differing environments on the emergence and
-# persistence of novelty.
+# This frame includes only novel communities and is used
+# for persistence length modelling
+PersistenceFrame <- FullEnvFrame|>
+  filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
+  filter(consistency == T) |>
+  mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0))
+
 
 #### End of script ####
 
