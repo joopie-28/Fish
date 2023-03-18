@@ -26,7 +26,7 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "stringi", "tinytex", "knitr",
                  "sjPlot", "rworldmap", "ggeffects", 
                  "gridExtra", "clustsig", "dendextend",
-                 'betareg', 'car'
+                 'betareg', 'car', 'visreg'
                  ))
 
 
@@ -454,8 +454,6 @@ fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site
 fixed.emergence.instant.mod <- glmer(instant ~ bin_lag + position + (1|Quarter/site_ID), 
                                      data = FullEnvFrame, family= 'binomial')
 
-emergence.mod.list <- list(fixed.emergence.instant.mod, fixed.emergence.cumul.mod, fixed.emergence.nov.mod)
-
 # One model at the time series level
 broad.emergence.mod <- glmer(binary_novel ~ (1|Basin), 
                              data = FullGeoFrame, family = 'binomial')
@@ -463,35 +461,63 @@ broad.emergence.mod <- glmer(binary_novel ~ (1|Basin),
 #### Modelling 2. Modelling persistence length and chance of blip versus persistant state ####
 
 # Simple poisson glm to understand the variables associated with persistence time.
-persLengthMod <- glm(novel.length ~ n.from.end +loss + gain + evenness + INC_increase+total_inv , 
+persLengthMod <- glmer(novel.length ~ n.from.end +loss + gain + evenness + INC_increase*total_inv + (1|site_ID/Quarter) , 
                 data = PersistenceFrame, family='poisson')
 
 # Intercept-only random effects model to get estimate for the proportion of persisters v non-persisters.
-summary(glmer(binary_pers ~ 1 + (1|site_ID/Quarter) , data = PersistenceFrame,
-              family = 'binomial'))
+persBinaryNullMod <- glmer(binary_pers ~ 1 + (1|site_ID/Quarter) , data = PersistenceFrame,
+              family = 'binomial')
 
 # Binomial regression to understand factors that contribute to whether or not a community persists at all.
-summary(glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarter) , data = PersistenceFrame,
-              family = 'binomial'))
+persBinaryFullMod <- glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarter) , data = PersistenceFrame,
+              family = 'binomial')
 
 #### Modelling 3. Drivers of emergence #####
 
-# Binomial glm looking at community level emergence using ecological and environemntal variables
-summary(glmer(novel~position +bin_lag+ gain+loss+evenness +INC_increase*total_inv + (1|site_ID/Quarter), 
-              data = FullEnvFrame, family = 'binomial'))
+# Binomial glmm looking at community level emergence using ecological and environemntal variables
+EmergCommMod <- glmer(novel~position +bin_lag+ gain+loss+evenness +INC_increase*total_inv + (1|site_ID/Quarter), 
+              data = FullEnvFrame, family = 'binomial')
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
-summary(glmer(binary_novel ~ (1|Quarter), 
-              data = FullGeoFrame, family = 'binomial'))
+EmergSiteMod <- glmer(binary_novel ~ (1|Quarter), 
+              data = FullGeoFrame, family = 'binomial')
 
+# Modelling 4. First state post novelty.
 
+# Simply looking at the averages and if they differ at all.
+test <- FullEnvFrame |>
+  mutate(binary_postnov = ifelse(FirstPostNov == 'New_exploratory_State', 1, 0)) |>
+  filter(novel.class == 'Persister' | novel.class == 'BLIP')
 
-###### PHASE 3 - MODEL DIAGNOSTICS WITH DHARMA AND VIF ######
+summary(glm(binary_postnov~position+novel.class , data = test, family = "binomial")) # Is this a result? consult Simon.
 
+#### Combine all models in a list for ease of analysis ####
 
+NovelFishModels <- list('Emergence Rates' = list("fixed.emergence.nov.mod" = fixed.emergence.nov.mod,
+                              "fixed.emergence.cumul.mod" = fixed.emergence.cumul.mod,
+                              "fixed.emergence.instant.mod" = fixed.emergence.instant.mod,
+                              "broad.emergence.mod" = broad.emergence.mod),
+     'Persistence Models' = list("persLengthMod" = persLengthMod,
+                                 "persBinaryNullMod" = persBinaryNullMod,
+                                 "persBinaryFullMod" = persBinaryFullMod),
+     'Emergence Drivers' = list("EmergCommMod" = EmergCommMod,
+                                "EmergSiteMod" = EmergSiteMod))
 
-###### PHASE 3 - PRODUCING TABLES AND FIGURES ######
+###### PHASE 3 - MODEL DIAGNOSTICS AND FILE EXPORT ######
+
+# Test for overdispersion in each model using DHARma package.
+
+CheckDispersion(models)
+
+# vif
+
+# Create output csv's for all models using a custom function.
+lapply(1:length(flatten(NovelFishModels)), function(x){
+  extract.coefs(flatten(NovelFishModels)[x])
+})
+
+###### PHASE 4 - PRODUCING TABLES AND FIGURES ######
 
 #### Figure 1. Map of Novelty for Austrlalasia, Palearctic and Nearctic, with rates. ####
 pdf(file = "/Users/sassen/Desktop/Figure_1a-d.pdf",
@@ -540,6 +566,7 @@ dev.off()
 
 
 #### Table 1. 
+extract.coefs(broad.emergence.mod)
 
 #### Table 2.
 
