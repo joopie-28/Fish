@@ -171,6 +171,38 @@ full.novel.mat.season<-cbind(full.novel.mat.season, demography.frame[,-c(1,2,3,5
 full.novel.mat.season$basin <- as.factor(full.novel.mat.season$basin)
 
 
+# Lastly, we filter out all time series with inconsistencies between SIMPROF and NDF,
+# Following criteria outlined in the main document. We want to be sure that what is 
+# detected by NDF is of a magnitude fit for reality.
+
+LagConsistencyFilter <- function(full.novel.mat.season,nlag){
+  
+  for(site in full.novel.mat.season$site){
+    print(site)
+    # Subset the data by site
+    sub <- full.novel.mat.season[which(full.novel.mat.season$site == site),]
+    nov.lag <- sub$bin_lag[which(sub$cat == 'novel')]
+    # Check if we have a consistency to inspect
+    if(all(is.na(sub$consistency))){
+      next
+    }
+    else{
+      # If true, keep the data. We also remove those time series with lag of +3!
+      if(na.omit(unique(sub$consistency)) & any(nov.lag < nlag)){
+        next
+      }
+      else{
+        # If false, the novel community is unreliable and we remove it and the time series
+        print('Removing these rows')
+        full.novel.mat.season <- full.novel.mat.season[-which(full.novel.mat.season$site == site),]
+      }
+    }
+  }
+  return(full.novel.mat.season)
+}
+
+full.novel.mat.season <- LagConsistencyFilter(full.novel.mat.season, nlag=4)
+
 #### Pre-processing 7. Quantifying invaders at basin level ####
 
 # Create a new data frame holding the number of encountered invasive species in a whole basin, per year.
@@ -224,16 +256,7 @@ environmental_variables = data.frame('Variable' = c("Natural_Discharge_Annual",
                                                 "urb_pc_sse",
                                                 "hft_ix_s09"))
 
-
-# This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
-EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, 
-                                   HYBAS_scheme, environmental_variables$Code) |>
-  mutate("binary_novel" =  ifelse(novel > 0, 1, 0))
-
-
-
-
-### Pre-processing 9. 
+saveRDS(HYBAS_scheme, file = "./outputs/HYBAS_Scheme_1-12.rds")
 
 #### Pre-processing 9. Creating a site level base dataframe ####
 
@@ -315,6 +338,15 @@ geo.timeseries.full <- cbind(geo.timeseries.sf,
                                                                  'Basin' = Basin)
                                                 return(df)
                                               })))
+
+# This function extracts environmental data from the HydroAtlas, and adds it to our modelling frame.
+# We opted to go one step further and extract vairables for individual river segments, however
+# there is not a massive difference when considering envrionemntal variables at level 12.
+EnviroByTS_L12 <- create_ENV_frame(geo.timeseries.full, HYBAS_Level = 12, 
+                                   HYBAS_scheme, environmental_variables$Code) |>
+  mutate("binary_novel" =  ifelse(novel > 0, 1, 0))
+
+
 #### Pre-processing 10. Creating finished data frames for modelling at site and community level ####
 
 # Import spatial data for all relevant areas (HydroRivers database)
@@ -420,11 +452,11 @@ MergedENV_by_RivID <- globalRivers_Extracted |>
 # Join all environmental data to our time series 
 # data frame; at both site and community levels.
 
-# This is the site-level data frame
+# This is the site-level data frame CONSISTENCY?????
 FullGeoFrame <- geo.timeseries.full |>
   left_join(MergedENV_by_RivID, by = ("ID")) |>
   mutate(binary_novel = ifelse(novel > 0, 1, 0))|>
-  separate(ID, c('Site', 'Quarter'), remove = F)
+  separate(ID, c('Site', 'Quarter'), remove = F) 
 
 # This is the community-level data frame
 FullEnvFrame <- fullNovFrame_complete |>
@@ -473,15 +505,51 @@ persBinaryFullMod <- glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarte
               family = 'binomial')
 
 #### Modelling 3. Drivers of emergence #####
-
+test<-FullEnvFrame %>% 
+  mutate_at(c('position','loss', 'gain','bin_lag' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
+              "dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse"), 
+            ~(scale(., center =T, scale =T) %>% as.vector)) 
+ 
 # Binomial glmm looking at community level emergence using ecological and environemntal variables
-EmergCommMod <- glmer(novel~position +bin_lag+ gain+loss+evenness +INC_increase*total_inv + (1|site_ID/Quarter), 
-              data = FullEnvFrame, family = 'binomial')
+EmergCommMod <- glmer(cumul~position + gain+loss+delta_eveness +INC_increase*total_inv+ dis_m3_pyr +DIST_DN_KM+run_mm_cyr*ppd_pk_cav+
+                        ele_mt_cav*DIST_DN_KM+(1|site_ID/Quarter), 
+              data = test, family = 'binomial')
+
+forestPlotter <- function(model, labels){
+  
+  # Set theme
+  set_theme(
+    geom.outline.color = "antiquewhite4", 
+    geom.outline.size = 1, 
+    geom.label.size = 2,
+    title.size = 1.5, 
+    axis.angle.x = 0, 
+    axis.textcolor = "black",
+    axis.linecolor.x = 'black',
+    axis.linecolor.y = 'black',
+    base = theme_classic(),
+    title.color = 'white'
+      
+  )
+  # plot model
+  plot_model(model, show.p = T, axis.labels = NULL,
+             col = c('red', 'steelblue'), vline.color = 'red')
+  
+}
+
+forestPlotter(EmergCommMod)
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
-EmergSiteMod <- glmer(binary_novel ~ (1|Quarter), 
-              data = FullGeoFrame, family = 'binomial')
+test.geo<-FullGeoFrame %>% 
+  mutate_at(c("run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse"), 
+            ~(scale(., center =T, scale =T) %>% as.vector)) |>
+  filter()
+EmergSiteMod <- glm(binary_novel ~ dis_m3_pyr + run_mm_cyr + ele_mt_cav +DIST_DN_KM+
+                      ppd_pk_cav+pac_pc_cse*hft_ix_c09 + ele_mt_cav*DIST_DN_KM, 
+              data = test.geo, family = 'binomial') 
+
+
 
 # Modelling 4. First state post novelty.
 

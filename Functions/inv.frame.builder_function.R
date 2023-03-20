@@ -313,13 +313,10 @@ inv.frame.builder.V2 <- function(converted_matrix_list){
     matrix_1$BioRealm <- NA
     
     
-    # evenness
-    
+    # Add Shannon diversity and evenness
     even.vector <- NULL
     shannon.vector <- NULL
-    diversity.vector <- NULL
-    diversity.prev.vector <- NA
-    diversity.next.vector <- NULL
+    
     for (i in 1:nrow(matrix)){
       # Get number of species
       n.sp <- ncol(matrix[,matrix[i,] > 0, drop = F])
@@ -334,7 +331,10 @@ inv.frame.builder.V2 <- function(converted_matrix_list){
     
     matrix_1$evenness <- even.vector
     matrix_1$shannon.d <- shannon.vector
- 
+    
+    # Add delta metrics as these might be more meaningful
+    matrix_1$delta_eveness <- even.vector - c(NA, even.vector[-length(even.vector)])
+    matrix_1$delta_shannon <- shannon.vector - c(NA, shannon.vector[-length(shannon.vector)])
    
     # Country 
     for (i in 1:nrow(time_series_data)){
@@ -374,34 +374,16 @@ inv.frame.builder.V2 <- function(converted_matrix_list){
     matrix_1 <- matrix_1[, c("cat", "site", "position", 
                              "bin_lag","BioRealm","basin","Longitude", "Latitude", 
                              "NNC_increase", "NAC_increase","NAC_spec_increase", "INC_increase", 
-                             "bins", "novel", "instant", "cumul", "country", "evenness", "shannon.d",
+                             "bins", "novel", "instant", "cumul", "country", "evenness", "delta_eveness", "shannon.d", "delta_shannon",
                              'total.n')]
     
     return(matrix_1)
     
   })
   
+  # Binding the final product and doing some clean ups
   list_mat_2 <- list_mat[!is.na(list_mat)]
-  
   list_mat_2 <- rbindlist(list_mat_2)
-  
- 
-  
-  # center all features
-  
-  #list_mat_2$NNC <- scale(list_mat_2$NNC, center = T, scale = T)
-  #list_mat_2$NNC_increase <- scale(list_mat_2$NNC_increase, center = T, scale = T)
-  #list_mat_2$NAC <- scale(list_mat_2$NAC, center = T, scale = T)
-  #list_mat_2$NAC_increase <- scale(list_mat_2$NAC_increase, center = T, scale = T)
-  #list_mat_2$INC <- scale(list_mat_2$INC, center = T, scale = T)
-  #list_mat_2$INC_increase <- scale(list_mat_2$INC_increase, center = T, scale = T)
-  #list_mat_2$bin_lag <- scale(as.numeric(list_mat_2$bin_lag, center = T, scale = T ))
-  #list_mat_2$position <- scale(list_mat_2$position, center = T, scale = T)
-  #list_mat_2$evenness <- scale(list_mat_2$evenness, center = T, scale = T)
-  #list_mat_2$orig <- scale(list_mat_2$orig, center = T, scale = T)
-  #list_mat_2$ext <- scale(list_mat_2$ext, center = T, scale = T)
-  #list_mat_2$shannon.d <- scale(list_mat_2$shannon.d, center = T, scale = T)
-
   list_mat_2$site <- as.factor(list_mat_2$site)
   list_mat_2[is.na(list_mat_2)] <- 0
   
