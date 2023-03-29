@@ -26,7 +26,8 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "stringi", "tinytex", "knitr",
                  "sjPlot", "rworldmap", "ggeffects", 
                  "gridExtra", "clustsig", "dendextend",
-                 'betareg', 'car', 'visreg'
+                 'betareg', 'car', 'visreg',"survivalAnalysis",
+                 'rnaturalearth'
                  ))
 
 
@@ -125,6 +126,8 @@ novelty.pers <- do.call(c,
 
 # Write the results back into our main data frame.
 full.novel.mat.season$novel.length <- NA
+full.novel.mat.season$novel.length.bins <- NA
+full.novel.mat.season$Survival_Status <- NA
 full.novel.mat.season$novel.class <- NA
 full.novel.mat.season$consistency <- NA
 full.novel.mat.season$median_seq_dis <- NA
@@ -139,8 +142,9 @@ for(i in 1:length(novelty.pers)){
   }
   
   full.novel.mat.season$consistency[indices] <- novelty.pers[[i]][[1]]$consistency
-  
-  full.novel.mat.season$novel.length[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$length.bins), NA, novelty.pers[[i]][[1]]$length.bins)
+  full.novel.mat.season$novel.length[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$length), NA, novelty.pers[[i]][[1]]$length)
+  full.novel.mat.season$novel.length.bins[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$length.bins), NA, novelty.pers[[i]][[1]]$length.bins)
+  full.novel.mat.season$Survival_Status[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$Survival_Status), NA, novelty.pers[[i]][[1]]$Survival_Status)
   full.novel.mat.season$novel.class[indices] <-  ifelse(is.null(novelty.pers[[i]][[1]]$Class), NA, novelty.pers[[i]][[1]]$Class)
   full.novel.mat.season$median_seq_dis[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$median_seq_dis), NA, novelty.pers[[i]][[1]]$median_seq_dis)
   full.novel.mat.season$median_cum_dis[indices] <- ifelse(is.null(novelty.pers[[i]][[1]]$median_cum_dis), NA, novelty.pers[[i]][[1]]$median_cum_dis)
@@ -432,7 +436,7 @@ data_list <- list(AUSRiver_Data, EURiver_Data, NARiver_Data ,
 for (i in 1:length(data_list)){
   print(i)
   data_list[[i]] <- data_list[[i]] |> 
-    select(c(1:14,environmental_variables_river$Code)) |>
+    #select(c(1:14,environmental_variables_river$Code)) |>
     filter(HYRIV_ID %in% globalRivers_Extracted$HYRIV_ID)
 }
 
@@ -468,7 +472,13 @@ FullEnvFrame <- fullNovFrame_complete |>
 PersistenceFrame <- FullEnvFrame|>
   filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
   filter(consistency == T) |>
-  mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0))
+  mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0),
+         novel.length = ifelse(novel.class == 'BLIP', 0, novel.length),
+         Survival_Status = ifelse(novel.class == 'BLIP', 0, Survival_Status)) |>
+  # Silly workaround because i misinterpeted the 0 and 1's for survival, 
+  # need to flip them for the algorithm to make sense of the numbers.
+  # 1 actually symbolises death, or a censoring event.
+  mutate(Survival_Status = ifelse(Survival_Status == 1, 0, 1))
 
 
 
@@ -503,6 +513,57 @@ persBinaryNullMod <- glmer(binary_pers ~ 1 + (1|site_ID/Quarter) , data = Persis
 # Binomial regression to understand factors that contribute to whether or not a community persists at all.
 persBinaryFullMod <- glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarter) , data = PersistenceFrame,
               family = 'binomial')
+
+# Approaching this as a survival analysis
+
+
+
+
+
+# Load the survival package
+library(survival)
+
+
+# Create a survival object with time and event variables
+PersistenceFrame$surv <- with(PersistenceFrame, Surv(novel.length, Survival_Status))
+
+test<-PersistenceFrame %>% 
+  mutate_at(c('position','loss', 'gain','ORD_FLOW' ,"ORD_CLAS","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM",
+              "DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"LENGTH_KM","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
+              "dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "for_pc_use", "pst_pc_cse"), 
+            ~(scale(., center =T, scale =T) %>% as.vector)) 
+# Fit a Cox regression model
+cox_model<-coxph(surv ~evenness+
+                   run_mm_cyr+
+                   for_pc_use +total_inv,
+                   data = test)
+
+# Print the model summary
+summary(cox_model)
+
+pdf(file = "/Users/sassen/Desktop/Exploring_Cox.pdf",
+    width = 15,
+    height = 10)
+
+# Plot the survival curves
+temp<-survfit(cox_model)
+plot(temp,
+     xlab = "Persistence Duration (years)", 
+     ylab = "Probability", col = c('blue', 'black', 'black'),
+     lwd = c(2,1,1))
+
+
+for (i in 1:length(temp$lower)){
+  polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
+          y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
+          col = rgb(0,1,1,0.1),
+          border = rgb(0,0,1,0))
+}
+ggforest((cox_model))
+
+dev.off()
+# Very interesting !
+
 
 #### Modelling 3. Drivers of emergence #####
 test<-FullEnvFrame %>% 

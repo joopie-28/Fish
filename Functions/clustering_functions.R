@@ -325,74 +325,6 @@ nov.cluster.id.V4 <- function(matrix){
   
 }
 
-
-length.calculator.V2 <- function(test, novel_bin){
-  
-  # Extract all dendrogram labels
-  names.vec <- unlist(list(test$significantclusters))
-  
-  # Construct a new named vector with communities assigned to significant clusters
-  new.vec <- NULL
-  for(i in 1:length(names.vec)){
-    for(j in 1:length(test$significantclusters)){
-      if (names.vec[i] %in% test$significantclusters[[j]]){
-        new.vec[i] <- j
-        names(new.vec)[i] <- names.vec[i]
-      }
-    }
-  }
-  
-  # Ensure community labels are sorted in descending order.
-  # Use to reorder the cluster vector.
-  sorted.index <- as.character(sort(as.numeric(names(new.vec)), decreasing  =T))
-  new.vec <- new.vec[sorted.index]
-  
-  # Extract the vector index for the novel community
-  novel_bin_index <- which(names(new.vec) == novel_bin)
-  
-  # Extract the novel group
-  group.novel<-new.vec[[novel_bin_index]]
-  
-  
-  # Loop through the vector of clusters to find the start and end of the
-  # novel composition
-  start <- novel_bin
-  end <- NULL
-  
-  for(i in 1:length(new.vec)){
-    
-    # This reads as: If we bump into a non-novel cluster after having
-    # already passed the novel community, then the novel state has ended.
-    if(new.vec[i] %!in% group.novel & as.numeric(names(new.vec)[i]) < start){
-      end <- as.numeric(names(new.vec)[i])
-      break
-    }
-    
-    # If we dont meet these requirements, the novel community doesn't end
-    if(is.null(end)){
-      end <- as.numeric(names(new.vec)[length(new.vec)])
-    }
-    
-  }
-  
-  # Correct for novel communities at very end
-  
-  if(novel_bin == as.numeric(names(new.vec[length(new.vec)]))){
-    end <- novel_bin
-  }
-  
-  
-  # Persistence length is simply the start of the novel state until we 
-  # enter something significantly different.
-  length <- start-end
-  
-  return(list("length" = length,
-              "start" = start,
-              "end" = end,
-              'clustervec' = new.vec))
-}
-
-
 nov.cluster.id.V5 <- function(matrix){
   
   # Identify novelty in time series
@@ -570,7 +502,6 @@ nov.cluster.id.V5 <- function(matrix){
   return(return.dat)
 
 }
-
 
 nov.cluster.id.V6 <- function(matrix){
   
@@ -887,6 +818,7 @@ nov.cluster.id.V7 <- function(matrix, method_clus,
       length <- length.output$length 
       start <- length.output$start
       end <- length.output$end
+      Survival_Status <- length.output$Survival_Status
       
       bin.start <- which(rev(number.names) == start)
       bin.end <- which(rev(number.names) == end)
@@ -957,6 +889,7 @@ nov.cluster.id.V7 <- function(matrix, method_clus,
                                  'nspp' =nspp,
                                  'nbins'= nyears,
                                  'consistency' = consistency,
+                                 'Survival_Status' = Survival_Status,
                                  'FirstPostNov' = FirstPostNov)))
       names(return.data) <- full.ID
     }
@@ -966,6 +899,75 @@ nov.cluster.id.V7 <- function(matrix, method_clus,
   
 }
 
+length.calculator.V2 <- function(test, novel_bin){
+  
+  # Extract all dendrogram labels
+  names.vec <- unlist(list(test$significantclusters))
+  
+  # Construct a new named vector with communities assigned to significant clusters
+  new.vec <- NULL
+  for(i in 1:length(names.vec)){
+    for(j in 1:length(test$significantclusters)){
+      if (names.vec[i] %in% test$significantclusters[[j]]){
+        new.vec[i] <- j
+        names(new.vec)[i] <- names.vec[i]
+      }
+    }
+  }
+  
+  # Ensure community labels are sorted in descending order.
+  # Use to reorder the cluster vector.
+  sorted.index <- as.character(sort(as.numeric(names(new.vec)), decreasing  =T))
+  new.vec <- new.vec[sorted.index]
+  
+  # Extract the vector index for the novel community
+  novel_bin_index <- which(names(new.vec) == novel_bin)
+  
+  # Extract the novel group
+  group.novel<-new.vec[[novel_bin_index]]
+  
+  
+  # Loop through the vector of clusters to find the start and end of the
+  # novel composition
+  start <- novel_bin
+  end <- NULL
+  
+  for(i in 1:length(new.vec)){
+    
+    # This reads as: If we bump into a non-novel cluster after having
+    # already passed the novel community, then the novel state has ended.
+    if(new.vec[i] %!in% group.novel & as.numeric(names(new.vec)[i]) < start){
+      end <- as.numeric(names(new.vec)[i])
+      Survival_Status <- 0
+      break
+    }
+    
+    # If we dont meet these requirements, the novel community doesn't end
+    if(is.null(end)){
+      end <- as.numeric(names(new.vec)[length(new.vec)])
+      Survival_Status <- 1
+    }
+    
+  }
+  
+  # Correct for novel communities at very end
+  
+  if(novel_bin == as.numeric(names(new.vec[length(new.vec)]))){
+    end <- novel_bin
+  }
+  
+  
+  # Persistence length is simply the start of the novel state until we 
+  # enter something significantly different.
+  length <- start-end
+  
+  
+  return(list("length" = length,
+              "start" = start,
+              "end" = end,
+              'Survival_Status' = Survival_Status,
+              'clustervec' = new.vec))
+}
 
 
 
