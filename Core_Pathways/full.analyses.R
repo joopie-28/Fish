@@ -473,7 +473,7 @@ PersistenceFrame <- FullEnvFrame|>
   filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
   filter(consistency == T) |>
   mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0),
-         novel.length = ifelse(novel.class == 'BLIP', 0, novel.length),
+         novel.length = ifelse(novel.class == 'BLIP', 1, novel.length),
          Survival_Status = ifelse(novel.class == 'BLIP', 0, Survival_Status)) |>
   # Silly workaround because i misinterpeted the 0 and 1's for survival, 
   # need to flip them for the algorithm to make sense of the numbers.
@@ -500,69 +500,80 @@ fixed.emergence.instant.mod <- glmer(instant ~ bin_lag + position + (1|Quarter/s
 broad.emergence.mod <- glmer(binary_novel ~ (1|Basin), 
                              data = FullGeoFrame, family = 'binomial')
 
-#### Modelling 2. Modelling persistence length and chance of blip versus persistant state ####
+#### Modelling 2. Modelling persistence length as a survival analysis ####
 
-# Simple poisson glm to understand the variables associated with persistence time.
-persLengthMod <- glmer(novel.length ~ n.from.end +loss + gain + evenness + INC_increase*total_inv + (1|site_ID/Quarter) , 
-                data = PersistenceFrame, family='poisson')
+## Cox Mixed-Effects Model
 
-# Intercept-only random effects model to get estimate for the proportion of persisters v non-persisters.
-persBinaryNullMod <- glmer(binary_pers ~ 1 + (1|site_ID/Quarter) , data = PersistenceFrame,
-              family = 'binomial')
-
-# Binomial regression to understand factors that contribute to whether or not a community persists at all.
-persBinaryFullMod <- glmer(binary_pers ~ n.from.end+total_inv +(1|site_ID/Quarter) , data = PersistenceFrame,
-              family = 'binomial')
-
-# Approaching this as a survival analysis
-
-
-
-
-
-# Load the survival package
+# Load the survival packages
 library(survival)
-
+library(survminer)
+library(coxme)
 
 # Create a survival object with time and event variables
 PersistenceFrame$surv <- with(PersistenceFrame, Surv(novel.length, Survival_Status))
 
 test<-PersistenceFrame %>% 
-  mutate_at(c('position','loss', 'gain','ORD_FLOW' ,"ORD_CLAS","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM",
-              "DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"LENGTH_KM","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
-              "dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "for_pc_use", "pst_pc_cse"), 
+  mutate_at(c('position','loss', 'gain','snw_pc_cyr' ,"delta_eveness","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM",
+              "DIST_UP_KM","run_mm_cyr", 'ppd_pk_uav','hft_ix_c09',"hft_ix_u09","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
+              "dis_m3_pyr",'ria_ha_csu','glc_pc_c20','pre_mm_uyr',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "for_pc_use", "pst_pc_cse"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
-# Fit a Cox regression model
-cox_model<-coxph(surv ~evenness+
-                   run_mm_cyr+
-                   for_pc_use +total_inv,
-                   data = test)
 
-# Print the model summary
-summary(cox_model)
+## WOULD LIKE TO ADD INC SPECIES ##
+# Create a null model with only the random effect
+null_fit <- coxph(surv ~ 1, data =test)
 
+# Create a mixed-effects cox regression model with covariates.
+fit <- coxph(surv ~ delta_eveness +INC_increase+total_inv + dis_m3_pyr +
+               run_mm_cyr +snw_pc_cyr + for_pc_cse ,
+             data = test) # INC*Total_inv not significnat here, remove for interpetability
+  
+# Likelihood test for fitted model
+lr_test <- anova(null_fit, fit)
+Anova(fit)
+# Test for proportional hazard assumption (independence of events)
+cox.zph(fit)
+
+# Inspect deviance residuals versus observations
+ggcoxdiagnostics(fit, type = "deviance",
+                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+# Test plotting functon
 pdf(file = "/Users/sassen/Desktop/Exploring_Cox.pdf",
     width = 15,
     height = 10)
 
 # Plot the survival curves
-temp<-survfit(cox_model)
+temp<-survfit(fit)
 plot(temp,
      xlab = "Persistence Duration (years)", 
-     ylab = "Probability", col = c('blue', 'black', 'black'),
+     ylab = "Persistence Probability of Novel Composition", col = c(rgb(1,0,0,1), rgb(0,0,0,0), rgb(0,0,0,0)),
      lwd = c(2,1,1))
-
-
 for (i in 1:length(temp$lower)){
   polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
           y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
-          col = rgb(0,1,1,0.1),
-          border = rgb(0,0,1,0))
+          col = rgb(1,0,0,0.3),
+          border = rgb(1,0,0,0))
+  points(x=temp$time[i],
+        y=temp$surv[i],
+        pch=19, col = 'red')
 }
-ggforest((cox_model))
 
+# Communicate that there are blips
+abline(h=temp$surv[1], lty = 2)
+
+text('<= Spurious Novelty', x=21.5, y=0.45, srt = -90)
+text('Persistent Novelty =>', x=21.5, y=0.15, srt = -90)
 dev.off()
-# Very interesting !
+
+survfit(fit) |>
+  ggsurvfit::ggsurvfit(linewidth = 1) +
+  add_confidence_interval() +
+  add_risktable() 
+
+
+# What if we looked at time to go BACK to a pre novel state???
+
+
 
 
 #### Modelling 3. Drivers of emergence #####
