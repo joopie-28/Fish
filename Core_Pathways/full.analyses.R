@@ -27,7 +27,7 @@ package.loader(c("rgdal", "raster", "rgeos", "sf",
                  "sjPlot", "rworldmap", "ggeffects", 
                  "gridExtra", "clustsig", "dendextend",
                  'betareg', 'car', 'visreg',"survivalAnalysis",
-                 'rnaturalearth'
+                 'rnaturalearth', 'survival', 'survminer', 'classInt'
                  ))
 
 
@@ -177,7 +177,8 @@ full.novel.mat.season$basin <- as.factor(full.novel.mat.season$basin)
 
 # Lastly, we filter out all time series with inconsistencies between SIMPROF and NDF,
 # Following criteria outlined in the main document. We want to be sure that what is 
-# detected by NDF is of a magnitude fit for reality.
+# detected by NDF is of a magnitude fit for reality. This function also filters
+# out those novel communities that emerged after large lag. 
 
 LagConsistencyFilter <- function(full.novel.mat.season,nlag){
   
@@ -191,7 +192,7 @@ LagConsistencyFilter <- function(full.novel.mat.season,nlag){
       next
     }
     else{
-      # If true, keep the data. We also remove those time series with lag of +3!
+      # If true, keep the data. We also remove those time series with lag of +nlag!
       if(na.omit(unique(sub$consistency)) & any(nov.lag < nlag)){
         next
       }
@@ -456,11 +457,26 @@ MergedENV_by_RivID <- globalRivers_Extracted |>
 # Join all environmental data to our time series 
 # data frame; at both site and community levels.
 
-# This is the site-level data frame CONSISTENCY?????
-FullGeoFrame <- geo.timeseries.full |>
+# This is the site-level data frame
+FullGeoFrame <- geo.timeseries.full |> 
   left_join(MergedENV_by_RivID, by = ("ID")) |>
   mutate(binary_novel = ifelse(novel > 0, 1, 0))|>
   separate(ID, c('Site', 'Quarter'), remove = F) 
+ 
+
+FullSiteFrame <- as.data.frame(FullGeoFrame |> 
+  st_drop_geometry() |>
+  group_by(Site) |>
+  summarise(back = sum(back),
+            instant = sum(instant),
+            cumul = sum(cumul),
+            novel=sum(novel),
+            n_timeseries = n(),
+            HYRIV_ID = HYRIV_ID) |>
+  mutate(binary_novel =ifelse(novel > 0, 1, 0)) |>
+  left_join(MergedENV_by_RivID[,-"ID"], by = c('HYRIV_ID')) |>
+  unique())
+
 
 # This is the community-level data frame
 FullEnvFrame <- fullNovFrame_complete |>
@@ -487,7 +503,7 @@ PersistenceFrame <- FullEnvFrame|>
 #### Modelling 1. Rates of Novelty Emergence around the globe ####
 
 # Three separate models for each novelty type, at the community level
-fixed.emergence.nov.mod <- glmer(novel ~ bin_lag + position+ (1|site_ID/Quarter), 
+fixed.emergence.nov.mod <- glmer(novel ~ position+ (1|site_ID/Quarter), 
                                  data = FullEnvFrame, family= 'binomial')
 
 fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site_ID), 
@@ -497,8 +513,8 @@ fixed.emergence.instant.mod <- glmer(instant ~ bin_lag + position + (1|Quarter/s
                                      data = FullEnvFrame, family= 'binomial')
 
 # One model at the time series level
-broad.emergence.mod <- glmer(binary_novel ~ (1|Basin), 
-                             data = FullGeoFrame, family = 'binomial')
+broad.emergence.mod <- glmer(binary_novel ~ 1, 
+                             data = FullSiteFrame, family = 'binomial')
 
 #### Modelling 2. Modelling persistence length as a survival analysis ####
 
@@ -512,20 +528,22 @@ library(coxme)
 # Create a survival object with time and event variables
 PersistenceFrame$surv <- with(PersistenceFrame, Surv(novel.length, Survival_Status))
 
-test<-PersistenceFrame %>% 
+# Scale all variables to allow for comparisons between effect sizes
+Scale_PersFrame<-PersistenceFrame %>% 
   mutate_at(c('position','loss', 'gain','snw_pc_cyr' ,"delta_eveness","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM",
-              "DIST_UP_KM","run_mm_cyr", 'ppd_pk_uav','hft_ix_c09',"hft_ix_u09","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
+              "DIST_UP_KM","run_mm_cyr", 'ppd_pk_uav','for_pc_cse',"hft_ix_u09","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
               "dis_m3_pyr",'ria_ha_csu','glc_pc_c20','pre_mm_uyr',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "for_pc_use", "pst_pc_cse"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
 
 ## WOULD LIKE TO ADD INC SPECIES ##
 # Create a null model with only the random effect
-null_fit <- coxph(surv ~ 1, data =test)
+null_fit <- coxph(surv ~ 1, 
+                  data =Scale_PersFrame)
 
 # Create a mixed-effects cox regression model with covariates.
-fit <- coxph(surv ~ delta_eveness +INC_increase+total_inv + dis_m3_pyr +
-               run_mm_cyr +snw_pc_cyr + for_pc_cse ,
-             data = test) # INC*Total_inv not significnat here, remove for interpetability
+fit <- coxph(surv ~ delta_shannon +INC_increase + dis_m3_pyr +
+               run_mm_cyr + for_pc_cse ,
+             data = Scale_PersFrame) # INC*Total_inv not significnat here, remove for interpetability
   
 # Likelihood test for fitted model
 lr_test <- anova(null_fit, fit)
@@ -545,47 +563,55 @@ pdf(file = "/Users/sassen/Desktop/Exploring_Cox.pdf",
 # Plot the survival curves
 temp<-survfit(fit)
 plot(temp,
-     xlab = "Persistence Duration (years)", 
-     ylab = "Persistence Probability of Novel Composition", col = c(rgb(1,0,0,1), rgb(0,0,0,0), rgb(0,0,0,0)),
-     lwd = c(2,1,1))
+     xlab = "Persistence Duration (Years post Emergence)", 
+     ylab = "Persistence Probability of Novel Composition", col = c(rgb(1,0.6,0,1), rgb(1,0.6,0,0), 
+                                                                    rgb(1,0.6,0,0)),
+     lwd = c(3,1,1), lty = c(1,1,1))
 for (i in 1:length(temp$lower)){
-  polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
-          y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
-          col = rgb(1,0,0,0.3),
-          border = rgb(1,0,0,0))
-  points(x=temp$time[i],
-        y=temp$surv[i],
-        pch=19, col = 'red')
+  #polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
+     #     y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
+      #    col = rgb(1,0.6,0,0.3),
+      #    border = rgb(1,0,0,0))
+  if(temp$n.censor[i] != 0){
+    
+    segments(x0=temp$time[i], x1 = temp$time[i],
+             y0 = temp$surv[i]-0.01, y1 = temp$surv[i]+0.01,
+             col = rgb(1,0.6,0,1))
+  }
+  
+  #points(x=temp$time[i],
+      #  y=temp$surv[i],
+      #  pch=19, col = 'orange')
 }
 
 # Communicate that there are blips
 abline(h=temp$surv[1], lty = 2)
 
-text('<= Spurious Novelty', x=21.5, y=0.45, srt = -90)
-text('Persistent Novelty =>', x=21.5, y=0.15, srt = -90)
+text('Spurious Novelty', x=17, y=0.35, srt = 0, cex=1.5)
+text('Persistent Novelty', x=17, y=0.25, srt = 0, cex=1.5)
 dev.off()
-
-survfit(fit) |>
-  ggsurvfit::ggsurvfit(linewidth = 1) +
-  add_confidence_interval() +
-  add_risktable() 
-
-
+ggforest(fit)
 # What if we looked at time to go BACK to a pre novel state???
-
+survminer::ggforest(fit)
 
 
 
 #### Modelling 3. Drivers of emergence #####
-test<-FullEnvFrame %>% 
-  mutate_at(c('position','loss', 'gain','bin_lag' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
-              "dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse"), 
+
+# Scale necessary variables
+Scale_FullEnv<-FullEnvFrame %>% 
+  mutate_at(c('position','loss', 'gain','bin_lag', 'shannon.d' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
+              "dis_m3_pyr",'ria_ha_csu',"run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
+              'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
+              'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_cyr","UPLAND_SKM"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
  
 # Binomial glmm looking at community level emergence using ecological and environemntal variables
-EmergCommMod <- glmer(cumul~position + gain+loss+delta_eveness +INC_increase*total_inv+ dis_m3_pyr +DIST_DN_KM+run_mm_cyr*ppd_pk_cav+
-                        ele_mt_cav*DIST_DN_KM+(1|site_ID/Quarter), 
-              data = test, family = 'binomial')
+EmergCommMod <- glmer(novel~position +loss+shannon.d +INC_increase*total_inv+ dis_m3_pyr +run_mm_cyr + 
+                        aet_mm_cyr +DIST_DN_KM+ele_mt_cav+ppd_pk_uav+
+                        (1|site_ID/Quarter), 
+              data = Scale_FullEnv, family = 'binomial')
+print(summary(EmergCommMod), correlation = T)
 
 forestPlotter <- function(model, labels){
   
@@ -605,7 +631,8 @@ forestPlotter <- function(model, labels){
   )
   # plot model
   plot_model(model, show.p = T, axis.labels = NULL,
-             col = c('red', 'steelblue'), vline.color = 'red')
+             col = c('red', 'steelblue')) +
+    geom_hline(yintercept = 1, colour='black', lty = 2)
   
 }
 
@@ -613,17 +640,20 @@ forestPlotter(EmergCommMod)
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
-test.geo<-FullGeoFrame %>% 
-  mutate_at(c("run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse"), 
-            ~(scale(., center =T, scale =T) %>% as.vector)) |>
-  filter()
-EmergSiteMod <- glm(binary_novel ~ dis_m3_pyr + run_mm_cyr + ele_mt_cav +DIST_DN_KM+
-                      ppd_pk_cav+pac_pc_cse*hft_ix_c09 + ele_mt_cav*DIST_DN_KM, 
-              data = test.geo, family = 'binomial') 
+Scale_FullGeo<-FullSiteFrame |>
+  mutate_at(c("run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
+              'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
+              'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_uyr","UPLAND_SKM"), 
+            ~(scale(., center =T, scale =T) %>% as.vector)) 
+EmergSiteMod <- glm(binary_novel ~ n_timeseries+dis_m3_pyr +run_mm_cyr + aet_mm_uyr +DIST_DN_KM+ele_mt_cav+ppd_pk_uav+for_pc_cse, 
+              data = Scale_FullGeo, family = 'binomial') 
+summary(EmergSiteMod)
+forestPlotter(EmergSiteMod)
 
 
 
-# Modelling 4. First state post novelty.
+
+# Modelling 4. First state post novelty. MIGHT NOT DO THIS
 
 # Simply looking at the averages and if they differ at all.
 test <- FullEnvFrame |>
@@ -659,14 +689,29 @@ lapply(1:length(flatten(NovelFishModels)), function(x){
 
 ###### PHASE 4 - PRODUCING TABLES AND FIGURES ######
 
-#### Figure 1. Map of Novelty for Austrlalasia, Palearctic and Nearctic, with rates. ####
-pdf(file = "/Users/sassen/Desktop/Figure_1a-d.pdf",
+#### Figure 1A-C. General emergence and spatial patterns of novelty in USA and EU ####
+
+# Fig 1A
+pdf(file = "/Users/sassen/Desktop/Figure_test_EU.pdf",
     width = 15,
-    height = 12)
-
-map.realm.plotter(full.novel.mat.season)
-
+    height = 12.5)
+complete.basin.novelty.plotter.PAL(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
 dev.off()
+
+# Fig 1B
+pdf(file = "/Users/sassen/Desktop/Figure_test_NA.pdf",
+    width = 25,
+    height = 8)
+complete.basin.novelty.plotter.NEA(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
+dev.off()
+
+# Fig 1C
+pdf(file = "/Users/sassen/Desktop/Figure_test_venn.pdf",
+    width = 15,
+    height = 15)
+venn_plot_main(full.novel.mat.season)
+dev.off()
+
 
 #### Figure 2. Visualising model predictions for invader presence ####
 pdf(file = "/Users/sassen/Desktop/Figure_4.pdf",

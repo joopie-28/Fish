@@ -1,400 +1,9 @@
 # Revamping figure 1
 
-# Extract basins
+# Final Plotting functions for figure 1a-c
 
-plot.basin.summary <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
-  
-  # Set up plotting background
-  palearctic.plot <- ne_countries(scale = "Large", continent = 'Europe', type = 'sovereignty',
-                                  returnclass = c("sp", "sf"))
-
-  ymin = 40
-  ymax = 70
-  xmin= -10
-  xmax= 35
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-  
-  plot(crop(palearctic.plot, realm_bbox), col = 'lightgrey', border = rgb(0,0,0,0),
-       axes = F, bg = 'white', xaxs = 'i', yaxs = 'i' )
-  
-  
-  ## Add hydrobasin statistics
-  
-  # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c"))[HYBAS_level]
-  
-  # Extract geometry of basins
-  basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c", 
-                             layer = lay_EU_6)
-  colname_level <- paste0('HYBAS_ID_', HYBAS_level)
-  # Compute summary statistics per basin
-  
-  temp<-geo.timeseries.full |>
-    #filter civ for now, slight issue with hybas scheme
-    dplyr::filter(Country != "CIV")|>
-    mutate(binary_novel = ifelse(novel > 0, 1, 0)) |>
-    left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('Site' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'binary_novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
-  
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
-  
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$binary_novel == 0),'observed'], non.nov)
-      nov <- c(basin.sub[which(basin.sub$binary_novel == 1),'observed'], nov)
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$binary_novel == 0),'observed']+
-                             basin.sub[which(basin.sub$binary_novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$binary_novel == 1),'observed']/basin.sub[which(basin.sub$binary_novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
-  
-  # Create a colour ramp for plotting
-  rbp<-colorRampPalette(c('gray60','orange'))
-  
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
-  
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
-  
-  plot(plotting.frame$geometry,
-       col = rbp(10)[as.numeric(cut(plotting.frame$proportion_novel,breaks =10))],
-       border=rgb(0,0,0,0),
-       add =T)
-  
-}
-
-pdf(file = "/Users/sassen/Desktop/Figure_test.pdf",
-    width = 15,
-    height = 12.5)
-plot.basin.summary.bycommunity.PAL(full.novel.mat.season, HYBAS_scheme, 8)
-plot.basin.summary.bycommunity.NEA(full.novel.mat.season, HYBAS_scheme, 8)
-plot.basin.summary.bycommunity.AUS(full.novel.mat.season, HYBAS_scheme, 8)
-dev.off()
-
-
-# Need a better colour ramp
-plot.basin.summary.bycommunity.PAL <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
-  
-  # Set up plotting background
-  palearctic.plot <- ne_countries(scale = "Large", continent = 'Europe', type = 'sovereignty',
-                                  returnclass = c("sp", "sf"))
-  
-  ymin <<- 40
-  ymax <<- 70
-  xmin= -10
-  xmax= 35
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-  
-  plot(crop(palearctic.plot, realm_bbox), col = 'lightgrey', border = rgb(0,0,0,0),
-       axes = T, bg = 'white', xaxs = 'i', yaxs = 'i')
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-
-  
-  ## Add hydrobasin statistics
-  
-  # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c"))[HYBAS_level]
-  
-  # Extract geometry of basins
-  basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c", 
-                             layer = lay_EU_6)
-  colname_level <- paste0('HYBAS_ID_', HYBAS_level)
-  # Compute summary statistics per basin
-  
-  temp<-full.novel.mat.season |>
-    #filter civ for now, slight issue with hybas scheme
-    dplyr::filter(country != "CIV") |>
-    left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('site_ID' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
-  
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
-  
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$novel == 0),'observed'], non.nov)
-      nov <- c(ifelse(nrow(basin.sub[which(basin.sub$novel == 1),'observed'])==0,0,
-                      basin.sub[which(basin.sub$novel == 1),'observed']), nov)
-      
-      # Continue here... wip
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$novel == 0),'observed']+
-                             basin.sub[which(basin.sub$novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$novel == 1),'observed']/basin.sub[which(basin.sub$novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
-  
-  # Create a colour ramp for plotting
-  rbp<-colorRampPalette(c('gray60','orange'))
-  
-  # Add colour ramp
-  colour.vec<- rbp(5)
-  prop.nov.ByBasin <- prop.nov.ByBasin |>
-    mutate(colramp = ifelse(proportion_novel == 0, colour.vec[1],
-                            ifelse(proportion_novel > 0 & proportion_novel <= 0.05,colour.vec[2],
-                                   ifelse(proportion_novel <= 0.10 & proportion_novel > 0.05 ,colour.vec[3],
-                                          ifelse(proportion_novel <= 0.15 & proportion_novel > 0.10,colour.vec[4],colour.vec[5])))))
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
-  
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
-  
-  plot(plotting.frame$geometry,
-       col = plotting.frame$colramp,
-       border=rgb(0,0,0,0),
-       add =T)
-
-}
-
-plot.basin.summary.bycommunity.NEA <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
-  
-  # Set up plotting background
-  nearctic.plot <- ne_countries(scale = "Large", geounit = c('United States of America', 'Canada', "Mexico"), type = 'sovereignty',
-                                returnclass = c("sp", "sf"))
-  ymin = 25
-  ymax = 50
-  xmin= -130
-  xmax= -55
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-  
-  plot(crop(nearctic.plot, realm_bbox), col = 'lightgrey', border = rgb(0,0,0,0),
-       axes = F, bg = 'white', xaxs = 'i', yaxs = 'i' )
-  
-  
-  ## Add hydrobasin statistics
-  
-  # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_na_lev01-12_v1c"))[HYBAS_level]
-  
-  # Extract geometry of basins
-  basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_na_lev01-12_v1c", 
-                             layer = lay_EU_6)
-  colname_level <- paste0('HYBAS_ID_', HYBAS_level)
-  # Compute summary statistics per basin
-  
-  temp<-full.novel.mat.season |>
-    #filter civ for now, slight issue with hybas scheme
-    dplyr::filter(country != "CIV") |>
-    left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('site_ID' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
-  
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
-  
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$novel == 0),'observed'], non.nov)
-      nov <- c(ifelse(nrow(basin.sub[which(basin.sub$novel == 1),'observed'])==0,0,
-                      basin.sub[which(basin.sub$novel == 1),'observed']), nov)
-      
-      # Continue here... wip
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$novel == 0),'observed']+
-                             basin.sub[which(basin.sub$novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$novel == 1),'observed']/basin.sub[which(basin.sub$novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
-  
-  # Create a colour ramp for plotting
-  rbp<-colorRampPalette(c('gray60','orange'))
-  
-  # Add colour ramp
-  colour.vec<- rbp(5)
-  prop.nov.ByBasin <- prop.nov.ByBasin |>
-    mutate(colramp = ifelse(proportion_novel == 0, colour.vec[1],
-                            ifelse(proportion_novel > 0 & proportion_novel <= 0.05,colour.vec[2],
-                                   ifelse(proportion_novel <= 0.10 & proportion_novel > 0.05 ,colour.vec[3],
-                                          ifelse(proportion_novel <= 0.15 & proportion_novel > 0.10,colour.vec[4],colour.vec[5])))))
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
-  
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
-  
-  plot(plotting.frame$geometry,
-       col = plotting.frame$colramp,
-       border=rgb(0,0,0,0),
-       add =T)
-  
-}
-
-plot.basin.summary.bycommunity.AUS <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
-  
-  # Set up plotting background
-  aus.plot <- ne_countries(scale = "Large", geounit = c('australia', 'new zealand', 'papua new guinea', 'indonesia'), type = 'map_units',
-                           returnclass = c("sp", "sf"))
-  ymin = -47 
-  ymax = -7
-  xmin = 110 
-  xmax = 160
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-  
-  plot(crop(aus.plot, realm_bbox), col = 'lightgrey', border = rgb(0,0,0,0),
-       axes = F, bg = 'white', xaxs = 'i', yaxs = 'i' )
-  
-  segments(x0=149, y0=-29, x1 =149 , y1 =-25 )
-  segments(x0=149, y0=-29, x1 =155 , y1 =-29 )
-  segments(x0=155, y0=-29, x1 =155 , y1 =-25 )
-  segments(x0=155, y0=-25, x1 =149 , y1 =-25 )
-  segments(x0 = 155, y0 = -29, x1=135.2, y1= -47.6   )
-  segments(x0 = 149, y0 = -25, x1=,116, y1= -29   )
-  par(fig = c(0.175, 0.54, 0.145, 0.45), new = T, mai= c(0,0,0,0), mar=c(0,0,0,0)) 
-  qld_bbox = st_bbox(c(ymin = -29, ymax = -25, xmin =149, xmax = 160))
-  plot(crop(ne_countries(scale = 'Large', country = c('Australia'), type = 'sovereignty',
-                         returnclass = c("sp", "sf")), qld_bbox), col = 'lightgrey', bg= 'white')
-  box(which = 'plot',  lty = 1)
-  ## Add hydrobasin statistics
-  
-  # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_au_lev01-12_v1c"))[HYBAS_level]
-  
-  # Extract geometry of basins
-  basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_au_lev01-12_v1c", 
-                             layer = lay_EU_6)
-  colname_level <- paste0('HYBAS_ID_', HYBAS_level)
-  # Compute summary statistics per basin
-  
-  temp<-full.novel.mat.season |>
-    #filter civ for now, slight issue with hybas scheme
-    dplyr::filter(country != "CIV") |>
-    left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('site_ID' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
-  
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
-  
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$novel == 0),'observed'], non.nov)
-      nov <- c(ifelse(nrow(basin.sub[which(basin.sub$novel == 1),'observed'])==0,0,
-                      basin.sub[which(basin.sub$novel == 1),'observed']), nov)
-      
-      # Continue here... wip
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$novel == 0),'observed']+
-                             basin.sub[which(basin.sub$novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$novel == 1),'observed']/basin.sub[which(basin.sub$novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
-  
-  # Create a colour ramp for plotting
-  rbp<-colorRampPalette(c('gray60','orange'))
-  
-  # Add colour ramp
-  colour.vec<- rbp(5)
-  prop.nov.ByBasin <- prop.nov.ByBasin |>
-    mutate(colramp = ifelse(proportion_novel == 0, colour.vec[1],
-                            ifelse(proportion_novel > 0 & proportion_novel <= 0.05,colour.vec[2],
-                                   ifelse(proportion_novel <= 0.10 & proportion_novel > 0.05 ,colour.vec[3],
-                                          ifelse(proportion_novel <= 0.15 & proportion_novel > 0.10,colour.vec[4],colour.vec[5])))))
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
-  
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
-  
-  plot(plotting.frame$geometry,
-       col = plotting.frame$colramp,
-       border=rgb(0,0,0,0),
-       add =T)
-  
-}
-
-
-
-
-plot.basin.summary.bycommunity.PAL(full.novel.mat.season, HYBAS_scheme, 8)
-
-# NEED TO:
-# make sure seasonality is not influencing these numbers
-# Colour legend
-
-complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
+complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, FullGeoFrame, 
+                                               HYBAS_scheme, HYBAS_level){
   # Define layout of the plot
   layout(matrix(c(1,2), ncol=2), widths=c(2,1), height=4)
   
@@ -411,86 +20,78 @@ complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, HYBAS_sche
   xmax= 35
   
   realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
-  
+  # Set spherical geometry to false for more accurate plotting
+  sf_use_s2(FALSE)
   plot(crop(palearctic.plot, realm_bbox), col = 'lightgrey', border = rgb(0,0,0,0),
        axes = F, bg = 'white', xaxs = 'i', yaxs = 'i')
-  
-  realm_bbox = st_bbox(c(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax))
   
   
   ## Add hydrobasin statistics
   
   # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c"))[HYBAS_level]
+  lay_EU <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c"))[HYBAS_level]
   
   # Extract geometry of basins
   basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_eu_lev01-12_v1c", 
-                             layer = lay_EU_6)
+                             layer = lay_EU)
   colname_level <- paste0('HYBAS_ID_', HYBAS_level)
-  # Compute summary statistics per basin
   
-  temp<-full.novel.mat.season |>
+  # Compute summary statistics per basin
+  propFrame <-full.novel.mat.season |>
     #filter civ for now, slight issue with hybas scheme
     dplyr::filter(country != "CIV") |>
     left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('site_ID' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
+    group_by_at(vars(starts_with('HYBAS_ID_'))) |>
+    summarise(observed_novel = sum(novel==1),
+              observed_non_novel = sum(novel == 0)) |>
+    mutate(prop.novel = observed_novel/observed_non_novel,
+           total_obs_basin = observed_novel+observed_non_novel)
   
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
+  # Add grey hydrobasins as background context
+  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
+  plot(filtered.basin.shapes$geometry,
+       col = 'gray60',
+       border=rgb(0,0,0,0),
+       add =T)
   
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$novel == 0),'observed'], non.nov)
-      nov <- c(ifelse(nrow(basin.sub[which(basin.sub$novel == 1),'observed'])==0,0,
-                      basin.sub[which(basin.sub$novel == 1),'observed']), nov)
-      
-      # Continue here... wip
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$novel == 0),'observed']+
-                             basin.sub[which(basin.sub$novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$novel == 1),'observed']/basin.sub[which(basin.sub$novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
-  
+  ### Do not plot basins with less than cutoff value. this leads to clutter and 
+  # does not reflect reality.
+  propFrame <- propFrame |>
+    mutate(prop.novel = ifelse(total_obs_basin < 50, NA ,prop.novel))
+ 
+
   # Create a colour ramp for plotting
   rbp<-colorRampPalette(c('gray60','orange'))
-  
+  ncols <- 4
   # Add colour ramp
-  colour.vec<- rbp(5)
-  prop.nov.ByBasin <- prop.nov.ByBasin |>
-    mutate(colramp = ifelse(proportion_novel == 0, colour.vec[1],
-                            ifelse(proportion_novel > 0 & proportion_novel <= 0.05,colour.vec[2],
-                                   ifelse(proportion_novel <= 0.10 & proportion_novel > 0.05 ,colour.vec[3],
-                                          ifelse(proportion_novel <= 0.15 & proportion_novel > 0.10,colour.vec[4],colour.vec[5])))))
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
+  class_intervals = classIntervals(propFrame$prop.novel, n = ncols, style = "jenks")
   
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
+  propFrame <- propFrame|>
+    mutate(colramp =rbp(ncols)[findInterval(propFrame$prop.novel, class_intervals$brks)])
+   
+  # Plot with colours 
+  plotting.frame<-left_join(filtered.basin.shapes, propFrame, by = c('HYBAS_ID'= colname_level )) |>
+    dplyr::filter(!is.na(prop.novel))
   
   plot(plotting.frame$geometry,
        col = plotting.frame$colramp,
        border=rgb(0,0,0,0),
        add =T)
+  
+  plot(subset(FullGeoFrame, binary_novel ==0)$geometry.x ,add=T, col = alpha('black',0.5), pch=19, cex=0.3)
+  plot(subset(FullGeoFrame, binary_novel ==1)$geometry.x ,add=T, col = alpha('black',1),
+       bg = alpha('orange',1), pch=21, cex=1)
+  
+  # Colour legend !!!
+  brks <- round(classIntervals(prop.nov.ByBasin$proportion_novel, n = ncols, style = "jenks")$brks, digits = 2)
+  brkLabels <- NULL
+  for(i in 1:(length(brks)-1)){
+    brkLabels[i] <- paste0(brks[i]," - ",brks[i+1])
+  }
+  legend("topleft", title= "Novel compositions as proportion of total surveys", legend = brkLabels, fill = rbp(ncols), cex = 1.3)
+  
+  
+  
   
   # Next bit
   
@@ -499,9 +100,14 @@ complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, HYBAS_sche
   # define the bin width
   bin_width <- 2
   
-  df <- full.novel.mat.season |>
-    dplyr::filter(BioRealm == 'Palearctic')
-  df_nov <- subset(df, novel == 1)
+  temp_coords <- st_coordinates(FullGeoFrame)
+  
+  df <- FullGeoFrame |>
+    mutate(Latitude = temp_coords[,2],
+           Longitude = temp_coords[,1]) |>
+    dplyr::filter(BioRealm == 'Palearctic')|>
+    st_drop_geometry()
+  df_nov <- subset(df, binary_novel == 1)
   # create a new column 'lat_group' by dividing latitude by the bin width and rounding down
   df$lat_group <- floor(df$Latitude / bin_width) * bin_width
   df_nov$lat_group <- floor(df_nov$Latitude / bin_width) * bin_width
@@ -535,12 +141,12 @@ complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, HYBAS_sche
   plot(NULL, xlim=c(0,max(range_df$propnovel)), 
        ylim=c(ymin.map,ymax.map-1.3), axes= F, xlab = "")
   axis(side=1)
-  mtext("Proportion of Novel Communities", 
+  mtext("Proportion of Sites where Novelty Emerged", 
         side=1,line=3, cex.lab=1)
   
-  for(i in 1:(nrow(range_df)-1)){
+  for(i in 2:(nrow(range_df))){
     print(i)
-    polygon(y=c(range_df$min_lat[i], range_df$min_lat[i+1],range_df$min_lat[i+1] ,range_df$min_lat[i] ),
+    polygon(y=c(range_df$min_lat[i-1], range_df$min_lat[i],range_df$min_lat[i] ,range_df$min_lat[i-1] ),
             x= c(0,0,range_df$propnovel[i], range_df$propnovel[i]), col='grey70')
     # polygon(y=c(range_df$min_lat[i], range_df$min_lat[i+1],range_df$min_lat[i+1] ,range_df$min_lat[i] ),
     #      x= c(0,0,range_df$no_obs[i], range_df$no_obs[i]), col = "grey70")
@@ -552,7 +158,8 @@ complete.basin.novelty.plotter.PAL <- function(full.novel.mat.season, HYBAS_sche
   
 }
 
-complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, HYBAS_scheme, HYBAS_level){
+complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, FullGeoFrame,
+                                               HYBAS_scheme, HYBAS_level){
   # Define layout of the plot
   layout(matrix(c(1,2), ncol=2), widths=c(2,1), height=4)
   
@@ -575,77 +182,67 @@ complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, HYBAS_sche
   ## Add hydrobasin statistics
   
   # Extract desired level of hydrobasins
-  lay_EU_6 <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_na_lev01-12_v1c"))[HYBAS_level]
+  lay_EU <- sort(ogrListLayers("/Users/sassen/Desktop/Hydrobasins/hybas_na_lev01-12_v1c"))[HYBAS_level]
   
   # Extract geometry of basins
   basin.shapes_EU <- st_read(dsn = "/Users/sassen/Desktop/Hydrobasins/hybas_na_lev01-12_v1c", 
-                             layer = lay_EU_6)
+                             layer = lay_EU)
   colname_level <- paste0('HYBAS_ID_', HYBAS_level)
   # Compute summary statistics per basin
   
-  temp<-full.novel.mat.season |>
+  # Compute summary statistics per basin
+  propFrame <-full.novel.mat.season |>
     #filter civ for now, slight issue with hybas scheme
     dplyr::filter(country != "CIV") |>
     left_join(HYBAS_scheme[,c('TimeSeriesID',colname_level)], by = c('site_ID' = 'TimeSeriesID')) |>
-    group_by_at(vars(starts_with('HYBAS_ID_'),'novel')) |>
-    summarise(observed = n()) |>
-    st_drop_geometry()
+    group_by_at(vars(starts_with('HYBAS_ID_'))) |>
+    summarise(observed_novel = sum(novel==1),
+              observed_non_novel = sum(novel == 0)) |>
+    mutate(prop.novel = observed_novel/observed_non_novel,
+           total_obs_basin = observed_novel+observed_non_novel)
   
-  # Compute, for each basin, the proportion of timeseries where novelty occured, 
-  # versus those that did not.
-  non.nov <- NULL
-  nov <- NULL
-  prop.nov <- NULL
+  # Add grey hydrobasins as background context
+  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
+  plot(filtered.basin.shapes$geometry,
+       col = 'gray60',
+       border=rgb(0,0,0,0),
+       add =T)
   
-  for (basin in unique(temp[[colname_level]])){
-    print(basin)
-    basin.sub <- temp[which(temp[1] == basin),]
-    # Convoluted, but essentially divides novelty by non-novelty at time series level
-    if(nrow(basin.sub) > 1){
-      non.nov <- c(basin.sub[which(basin.sub$novel == 0),'observed'], non.nov)
-      nov <- c(ifelse(nrow(basin.sub[which(basin.sub$novel == 1),'observed'])==0,0,
-                      basin.sub[which(basin.sub$novel == 1),'observed']), nov)
-      
-      # Continue here... wip
-      prop.nov <- c(ifelse(basin.sub[which(basin.sub$novel == 0),'observed']+
-                             basin.sub[which(basin.sub$novel == 1),'observed'] > 0,  
-                           basin.sub[which(basin.sub$novel == 1),'observed']/basin.sub[which(basin.sub$novel == 0),'observed'], 
-                           NA), prop.nov)
-    }else{
-      # if no novel time series in basin, just add 0
-      non.nov <- c(basin.sub$observed, non.nov)
-      nov <- c(0, nov)
-      prop.nov <- c(0, prop.nov)
-    }
-    
-  }
-  # Store in a new df upon loop completion
-  prop.nov.ByBasin <- data.frame('basin' =unique(temp[1]),
-                                 'proportion_novel' = unlist(prop.nov),
-                                 'novel' = unlist(nov),
-                                 'non_novel' = unlist(non.nov))
+  ### Do not plot basins with less than cutoff value. this leads to clutter and 
+  # does not reflect reality.
+  propFrame <- propFrame |>
+    mutate(prop.novel = ifelse(total_obs_basin < 50, NA ,prop.novel))
+  
   
   # Create a colour ramp for plotting
   rbp<-colorRampPalette(c('gray60','orange'))
-  
+  ncols <- 4
   # Add colour ramp
-  colour.vec<- rbp(5)
-  prop.nov.ByBasin <- prop.nov.ByBasin |>
-    mutate(colramp = ifelse(proportion_novel == 0, colour.vec[1],
-                            ifelse(proportion_novel > 0 & proportion_novel <= 0.05,colour.vec[2],
-                                   ifelse(proportion_novel <= 0.10 & proportion_novel > 0.05 ,colour.vec[3],
-                                          ifelse(proportion_novel <= 0.15 & proportion_novel > 0.10,colour.vec[4],colour.vec[5])))))
-  # Isolate sampled basins for plotting
-  filtered.basin.shapes <- basin.shapes_EU[basin.shapes_EU$HYBAS_ID %in% HYBAS_scheme[,colname_level],]
+  class_intervals = classIntervals(propFrame$prop.novel, n = ncols, style = "jenks")
   
-  plotting.frame<-left_join(filtered.basin.shapes, prop.nov.ByBasin, by = c('HYBAS_ID'= colname_level )) |>
-    dplyr::filter(!is.na(proportion_novel))
+  propFrame <- propFrame|>
+    mutate(colramp =rbp(ncols)[findInterval(propFrame$prop.novel, class_intervals$brks)])
+  
+  # Plot with colours 
+  plotting.frame<-left_join(filtered.basin.shapes, propFrame, by = c('HYBAS_ID'= colname_level )) |>
+    dplyr::filter(!is.na(prop.novel))
   
   plot(plotting.frame$geometry,
        col = plotting.frame$colramp,
        border=rgb(0,0,0,0),
        add =T)
   
+  plot(subset(FullGeoFrame, binary_novel ==0)$geometry.x ,add=T, col = alpha('black',0.5), pch=19, cex=0.3)
+  plot(subset(FullGeoFrame, binary_novel ==1)$geometry.x ,add=T, col = alpha('black',1),
+       bg = alpha('orange',1), pch=21, cex=1)
+  
+  # Colour legend !!!
+  brks <- round(classIntervals(prop.nov.ByBasin$proportion_novel, n = ncols, style = "jenks")$brks, digits = 2)
+  brkLabels <- NULL
+  for(i in 1:(length(brks)-1)){
+    brkLabels[i] <- paste0(brks[i]," - ",brks[i+1])
+  }
+  legend("topright", title= "Novel compositions as proportion of total surveys", legend = brkLabels, fill = rbp(ncols), cex = 1.3)
   # Next bit
   
   ymin.map = par('usr')[3] 
@@ -653,9 +250,14 @@ complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, HYBAS_sche
   # define the bin width
   bin_width <- 2
   
-  df <- full.novel.mat.season |>
-    dplyr::filter(BioRealm == 'Nearctic')
-  df_nov <- subset(df, novel == 1)
+  temp_coords <- st_coordinates(FullGeoFrame)
+  
+  df <- FullGeoFrame |>
+    mutate(Latitude = temp_coords[,2],
+           Longitude = temp_coords[,1]) |>
+    dplyr::filter(BioRealm == 'Nearctic')|>
+    st_drop_geometry()
+  df_nov <- subset(df, binary_novel == 1)
   # create a new column 'lat_group' by dividing latitude by the bin width and rounding down
   df$lat_group <- floor(df$Latitude / bin_width) * bin_width
   df_nov$lat_group <- floor(df_nov$Latitude / bin_width) * bin_width
@@ -681,11 +283,12 @@ complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, HYBAS_sche
     dplyr::filter(min_lat >= ymin)
   
   # Sometimes the nov.df and df are different lengths. we need to account for this.
- range_nov_df <- left_join(range_df, range_nov_df, by= c('lat_range')) |>
+  range_nov_df <- left_join(range_df, range_nov_df, by= c('lat_range')) |>
     mutate_at(c('no_obs.y'), ~replace_na(.,0)) |>
     mutate(no_obs = no_obs.y,
            min_lat = min_lat.x) |>
     dplyr::select(lat_range, no_obs, min_lat)
+  
   
   # Create the plot of Europe with hydrobasins
   par(mar = c(5, 0, 0, 1))
@@ -695,12 +298,12 @@ complete.basin.novelty.plotter.NEA <- function(full.novel.mat.season, HYBAS_sche
   plot(NULL, xlim=c(0,max(range_df$propnovel)), 
        ylim=c(ymin.map,ymax.map-1.3), axes= F, xlab = "")
   axis(side=1)
-  mtext("Proportion of Novel Communities", 
+  mtext("Proportion of Sites where Novelty Emerged", 
         side=1,line=3, cex.lab=1)
   
-  for(i in 1:(nrow(range_df)-1)){
+  for(i in 2:(nrow(range_df))){
     print(i)
-    polygon(y=c(range_df$min_lat[i], range_df$min_lat[i+1],range_df$min_lat[i+1] ,range_df$min_lat[i] ),
+    polygon(y=c(range_df$min_lat[i-1], range_df$min_lat[i],range_df$min_lat[i] ,range_df$min_lat[i-1] ),
             x= c(0,0,range_df$propnovel[i], range_df$propnovel[i]), col='grey70')
     # polygon(y=c(range_df$min_lat[i], range_df$min_lat[i+1],range_df$min_lat[i+1] ,range_df$min_lat[i] ),
     #      x= c(0,0,range_df$no_obs[i], range_df$no_obs[i]), col = "grey70")
@@ -718,7 +321,7 @@ venn_plot_main <- function(full.novel.mat){
     success_cat = c("instant", "cumul", "novel")[n]
     
     full.novel.mat$success = full.novel.mat[, success_cat]
-    mod<- glmer(success~1+bin_lag+position + (1|Quarter/site_ID), data = full.novel.mat, family = 'binomial')
+    mod<- glmer(success~position + (1|Quarter/site_ID), data = full.novel.mat, family = 'binomial')
     
     pred.df <- as.data.frame(summary(mod)$coefficients[1,])
     pred.df$taxa.rand <- summary(mod)$varcor$taxa[1,1]
@@ -805,21 +408,13 @@ venn_plot_main <- function(full.novel.mat){
        cex=1.7)
 }
 
-pdf(file = "/Users/sassen/Desktop/Figure_test_EU.pdf",
-    width = 15,
-    height = 12.5)
-complete.basin.novelty.plotter.PAL(full.novel.mat.season, HYBAS_scheme, 8)
-dev.off()
 
-pdf(file = "/Users/sassen/Desktop/Figure_test_NA.pdf",
-    width = 25,
-    height = 8)
-complete.basin.novelty.plotter.NEA(full.novel.mat.season, HYBAS_scheme, 7)
-dev.off()
+#### Custom forest plots
 
-pdf(file = "/Users/sassen/Desktop/Figure_test_venn.pdf",
-    width = 15,
-    height = 15)
-venn_plot_main(full.novel.mat.season)
-dev.off()
+plot_model(EmergCommMod) +
+  theme_bw() + theme(panel.grid = element_blank(), axis.line = element_line(),
+                     axis.text = element_text(size = 10), axis.title = element_text(size = 10))+ 
+  scale_color_manual(values = c("black", "blue")) +
+  geom_hline(yintercept = 1, colour='black', lty = 2)
+
 
