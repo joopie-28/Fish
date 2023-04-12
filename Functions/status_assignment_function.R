@@ -591,3 +591,135 @@ status_assignment.V2 <- function(survey_ID_full){
   return(test_matrix)
   
 }
+
+
+
+# Tags all exotics as just exoitcs, do not care about time.
+status_assignment.V3 <- function(survey_ID_full){
+  
+  survey_ID <- strsplit(as.character(survey_ID_full), ".",
+                        fixed = TRUE)[[1]][1]
+  # Identify the country
+  country <- names(full.ID.list[match(survey_ID, full.ID.list)])
+  
+  # Create the matrix (multiple countries possible)
+  test_matrix <- matrix_list_seasonality[[survey_ID_full]]
+  
+  if(country == "FRA"){
+    country_level <- fra_country_level
+    invaders <- fra_invaders
+  }
+  
+  if(country == "GBR"){
+    country_level <- gbr_country_level
+    invaders <- gbr_invaders
+  }
+  
+  if(country == "SWE"){
+    country_level <- swe_country_level
+  }
+  
+  if(country == "USA"){
+    country_level <- usa_country_level
+    invaders <- usa_invaders
+  }
+  
+  if(country == "ESP"){
+    country_level <- esp_country_level
+    invaders <- esp_invaders
+  }
+  
+  
+  if(country == "FIN"){
+    country_level <- fin_country_level
+    invaders <- fin_invaders
+  } 
+  
+  if(country == "AUS"){
+    country_level <- aus_country_level
+    invaders <- aus_invaders
+  } 
+  
+  if(country == "JPN"){
+    country_level <- jap_country_level
+    
+  } 
+  
+  if(country == "CAN"){
+    country_level <- can_country_level
+    invaders <- can_invaders
+  } 
+  
+  if(country == "HUN"){
+    country_level <- hun_country_level
+    invaders <- hun_invaders
+  }
+  
+  if(country == "BEL"){
+    country_level <- bel_country_level
+    invaders <- bel_invaders
+  } 
+  
+  if(country == "BWA"){
+    country_level <- bwa_country_level
+  } 
+  
+  if(country == "CIV"){
+    country_level <- civ_country_level
+    invaders <- civ_invaders
+  }
+  
+  if(country == "COL"){
+    country_level <- col_country_level
+  } 
+  
+  if(country == "BRA"){
+    country_level <- bra_country_level
+    invaders <- bra_invaders
+  } 
+  
+  #  Extract species names per basin
+  species_vector <- as.data.frame(as.matrix(colnames(test_matrix)))
+  
+  # We will start with the "unestablished invaders" as this category takes
+  # priority, this is always at a country level. In this version of the status 
+  # assignment, we do not differentiate between recent and older invaders,
+  # simply naming them 'exotics'
+  if(country != "SWE" & country != "JPN" & country != "BWA" & country != "COL"){
+    
+    for (i in 1:nrow(species_vector)) {
+      
+      for (j in 1:nrow(invaders)) {
+        if (species_vector$V1[i] == invaders$Species[j] | species_vector$V1[i] == "Neogobius melanostomus") {
+          species_vector$V1[i] <- paste0(species_vector$V1[i], ", Exotic C")
+        }
+      }  
+    }  
+  }
+  # The rest are considered natives (i.e. non-exotics)
+  for (i in 1:nrow(species_vector)) {
+    
+    
+    if (species_vector$V1[i] %in% country_level$Species) {
+      for (j in 1:nrow(country_level)) {
+        if (species_vector$V1[i] == country_level$Species[j]) {
+          species_vector$V1[i] <- paste0(species_vector$V1[i], ", ", country_level$Status[j], " C")
+        }
+      }  
+    }
+  }
+  
+  
+  colnames(test_matrix) <- species_vector$V1
+  country_level <- NULL
+  invaders <- NULL
+  
+  return(test_matrix)
+  
+}
+
+status_assignment.V3('G160.2')
+
+
+
+

@@ -66,7 +66,7 @@ for (i in 1:nrow(aus_species)) {
 
 # Return these to synonyms used in timeseries
 
-aus_species$Species[11] <- "Macquaria novemaculeatus"
+aus_species$Species[11] <- "Macquaria novemaculeata"
 aus_species$Species[16] <- "Anguilla australis australis"
 aus_species$Species[46] <- "Arrhamphus sclerolepis sclerolepis"
 aus_species$Species[62] <- "Melanotaenia splendida splendida"

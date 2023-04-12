@@ -87,12 +87,12 @@ nov.output <- novelty.detection.gam(matrix_list_seasonality)
 
 #### Pre-processing 2. Tag species as 'Invader', 'Non-native', or 'Native'####
 
-full.stat.matrices.season <- assign.stat.country.V2(names(matrix_list_seasonality)) # please check anguilla australis australis
+full.stat.matrices.season <- assign.stat.country.V2(names(matrix_list_seasonality)) 
 
 
 #### Pre-processing 3. Compute turnover metrics for each group of species ####
 
-full.nnc.matrices.season <- mat.nnc.ass.V2(full.stat.matrices.season)
+full.nnc.matrices.season <- mat.nnc.ass.V3(full.stat.matrices.season)
 
 
 #### Pre-processing 4. Create a data frame that can be used for modelling ####
@@ -116,6 +116,7 @@ nov.matrices <- matrix_list_seasonality[full.novel.mat.season$site[which(full.no
 # and use type I SIMPROF to find which clusters are significantly
 # different at alpha = 0.05.
 
+### CURRENTLY OVERESTIMATING LENGTHS!!!!! TIME SHOULD BE AT LAST COMMUNITY, NOT SUCCEEDING ONE!!!!!!
 novelty.pers <- do.call(c, 
                         lapply(1:length(nov.matrices), function(m){
                           print(m)
@@ -212,10 +213,10 @@ full.novel.mat.season <- LagConsistencyFilter(full.novel.mat.season, nlag=4)
 
 # Create a new data frame holding the number of encountered invasive species in a whole basin, per year.
 
-InvByBasin <- rbindlist(lapply(unique(time_series_data$HydroBasin), 
+InvByBasin <- rbindlist(lapply(unique(full.novel.mat.season$basin), 
                                function(basin){
                                  print(basin)
-                                 countInv_By_Basin(time_series_data, basin)
+                                 countEx_By_Basin(time_series_data, basin)
                                  
                                }))
 
@@ -530,7 +531,7 @@ PersistenceFrame$surv <- with(PersistenceFrame, Surv(novel.length, Survival_Stat
 
 # Scale all variables to allow for comparisons between effect sizes
 Scale_PersFrame<-PersistenceFrame %>% 
-  mutate_at(c('position','loss', 'gain','snw_pc_cyr' ,"delta_eveness","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM",
+  mutate_at(c('position','loss', 'gain','snw_pc_cyr' ,"delta_eveness","run_mm_cyr",'riv_tc_csu',"ari_ix_cav", "NNC_increase","total_inv", "DIST_DN_KM",
               "DIST_UP_KM","run_mm_cyr", 'ppd_pk_uav','for_pc_cse',"hft_ix_u09","ORD_STRA","inu_pc_cmx","inu_pc_cmn",
               "dis_m3_pyr",'ria_ha_csu','glc_pc_c20','pre_mm_uyr',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "for_pc_use", "pst_pc_cse"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
@@ -541,10 +542,11 @@ null_fit <- coxph(surv ~ 1,
                   data =Scale_PersFrame)
 
 # Create a mixed-effects cox regression model with covariates.
-fit <- coxph(surv ~ delta_shannon +INC_increase + dis_m3_pyr +
-               run_mm_cyr + for_pc_cse ,
-             data = Scale_PersFrame) # INC*Total_inv not significnat here, remove for interpetability
+fit <- coxph(surv ~ delta_eveness + dis_m3_pyr + NNC_spec_increase+
+                run_mm_cyr+ele_mt_cav + for_pc_cse,
+             data = subset(Scale_PersFrame)) # INC*Total_inv not significnat here, remove for interpetability
   
+
 # Likelihood test for fitted model
 lr_test <- anova(null_fit, fit)
 Anova(fit)
@@ -568,10 +570,10 @@ plot(temp,
                                                                     rgb(1,0.6,0,0)),
      lwd = c(3,1,1), lty = c(1,1,1))
 for (i in 1:length(temp$lower)){
-  #polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
-     #     y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
-      #    col = rgb(1,0.6,0,0.3),
-      #    border = rgb(1,0,0,0))
+  polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
+         y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
+         col = rgb(1,0.6,0,0.3),
+         border = rgb(1,0,0,0))
   if(temp$n.censor[i] != 0){
     
     segments(x0=temp$time[i], x1 = temp$time[i],
@@ -596,19 +598,19 @@ survminer::ggforest(fit)
 
 
 
-#### Modelling 3. Drivers of emergence #####
+ #### Modelling 3. Drivers of emergence #####
 
 # Scale necessary variables
 Scale_FullEnv<-FullEnvFrame %>% 
-  mutate_at(c('position','loss', 'gain','bin_lag', 'shannon.d' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "INC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
+  mutate_at(c('position','loss', 'gain','bin_lag', 'shannon.d' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "NNC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
               "dis_m3_pyr",'ria_ha_csu',"run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
               'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
               'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_cyr","UPLAND_SKM"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
  
 # Binomial glmm looking at community level emergence using ecological and environemntal variables
-EmergCommMod <- glmer(novel~position +loss+shannon.d +INC_increase*total_inv+ dis_m3_pyr +run_mm_cyr + 
-                        aet_mm_cyr +DIST_DN_KM+ele_mt_cav+ppd_pk_uav+
+EmergCommMod <- glmer(novel~position +loss+shannon.d +NNC_increase+ dis_m3_pyr +run_mm_cyr + 
+                        aet_mm_cyr +ele_mt_cav+ppd_pk_uav+
                         (1|site_ID/Quarter), 
               data = Scale_FullEnv, family = 'binomial')
 print(summary(EmergCommMod), correlation = T)
@@ -630,22 +632,25 @@ forestPlotter <- function(model, labels){
       
   )
   # plot model
-  plot_model(model, show.p = T, axis.labels = NULL,
+  plot_model(model, show.p = T, axis.labels =rev(labels),
              col = c('red', 'steelblue')) +
     geom_hline(yintercept = 1, colour='black', lty = 2)
   
 }
 
-forestPlotter(EmergCommMod)
+forestPlotter(EmergCommMod, labels = c('Position', 'Species Loss',
+                                       'Shannon Diversity', 'Invasive Species Increase','Invasive Species (Basin)',
+                                       'Average Yearly Discharge', 'Average Yearly Run-Off','Average Yearly Evapotranspiration',
+                                       'Elevation', 'Human Population Density','Invasive Species Increase:Invasive Species (Basin)' ))
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
 Scale_FullGeo<-FullSiteFrame |>
   mutate_at(c("run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
               'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
-              'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_uyr","UPLAND_SKM"), 
+              'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_cyr","UPLAND_SKM"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
-EmergSiteMod <- glm(binary_novel ~ n_timeseries+dis_m3_pyr +run_mm_cyr + aet_mm_uyr +DIST_DN_KM+ele_mt_cav+ppd_pk_uav+for_pc_cse, 
+EmergSiteMod <- glm(binary_novel ~ dis_m3_pyr +run_mm_cyr + aet_mm_cyr +ele_mt_cav+ppd_pk_uav, 
               data = Scale_FullGeo, family = 'binomial') 
 summary(EmergSiteMod)
 forestPlotter(EmergSiteMod)

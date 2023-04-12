@@ -77,9 +77,9 @@ rm(jap_species)
 # I am creating a separate status list for species that not established prior to 
 # 1970. 
 
-jap_invaders <- read.csv("/Users/sassen/Desktop/jap_invaders.csv")
+jap_invaders <- read.csv("/Users/sassen/Desktop/jpn_invaders.csv")
 
-saveRDS(jap_invaders, "./Exotics_databases_countries/jap_invaders.rds")
+saveRDS(jap_invaders, "./Exotics_databases_countries/jpn_invaders.rds")
 
 
 
@@ -87,6 +87,6 @@ saveRDS(jap_invaders, "./Exotics_databases_countries/jap_invaders.rds")
 jap_country_level_nn <- jap_country_level
 jap_country_level_nn["Status"] <- "Native"
 
-saveRDS(jap_country_level, "./Exotics_databases_countries/jap_country_level.rds")
-saveRDS(jap_country_level_nn, "./Exotics_databases_countries/jap_country_level_nn.rds")
+saveRDS(jap_country_level, "./Exotics_databases_countries/jpn_country_level.rds")
+saveRDS(jap_country_level_nn, "./Exotics_databases_countries/jpn_country_level_nn.rds")
 

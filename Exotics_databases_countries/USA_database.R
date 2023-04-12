@@ -65,7 +65,7 @@ usa_species$Species[6] <- "Ericymba buccata" # synonym
 usa_species$Species[10] <- "Moxostoma duquesnii" # spelling
 usa_species$Species[102] <- "Esox americanus americanus" # subspecies
 usa_species$Species[138] <- "Opsopoeodus emiliae emiliae" # subspecies
-usa_species$Species[171] <- "Esox americanus vermiculatis" # subspecies
+usa_species$Species[171] <- "Esox americanus vermiculatus" # subspecies
 usa_species$Species[256] <- "Hysterocarpus traskii traskii" # Subspecies
 
 # Save list

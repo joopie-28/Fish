@@ -63,14 +63,12 @@ assign.stat.country_all_equal <- function(country_list, country){
 }
 
 
-
-
 assign.stat.country.V2 <- function(country_list){
   
   output <- lapply(country_list, function(TimeSeries_ID){
                      
 
-                     temp <- status_assignment.V2(TimeSeries_ID)
+                     temp <- status_assignment.V3(TimeSeries_ID)
                      
                      return(temp)
                    })

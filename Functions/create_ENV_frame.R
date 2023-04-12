@@ -2,10 +2,10 @@
 
 create_ENV_frame <- function(df, HYBAS_Level, HYBAS_scheme, variables_list){
   
-  lay = ogrListLayers("/Users/sassen/Desktop/BasinATLAS_Data_v10.gdb/BasinATLAS_v10.gdb")[HYBAS_Level]
+  lay = ogrListLayers("/Users/sassen/Desktop/BasinAtlas/BasinATLAS_Data_v10/BasinATLAS_v10.gdb")[HYBAS_Level]
   
   # test
-  HydroAtlas_lev <- st_read(dsn = "/Users/sassen/Desktop/BasinATLAS_Data_v10.gdb/BasinATLAS_v10.gdb", 
+  HydroAtlas_lev <- st_read(dsn = "/Users/sassen/Desktop/BasinAtlas/BasinATLAS_Data_v10/BasinATLAS_v10.gdb", 
                              layer = lay)
   
   HydroAtlas_lev$HYBAS_ID <- as.factor(HydroAtlas_lev$HYBAS_ID)

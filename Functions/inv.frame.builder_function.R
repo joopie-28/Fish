@@ -372,9 +372,10 @@ inv.frame.builder.V2 <- function(converted_matrix_list){
     
     # Remove species
     matrix_1 <- matrix_1[, c("cat", "site", "position", 
-                             "bin_lag","BioRealm","basin","Longitude", "Latitude", 
-                             "NNC_increase", "NAC_increase","NAC_spec_increase", "INC_increase", 
-                             "bins", "novel", "instant", "cumul", "country", "evenness", "delta_eveness", "shannon.d", "delta_shannon",
+                             "bin_lag","BioRealm","basin","Longitude", "Latitude","NAC", "NAC_increase","NAC_spec_increase",
+                             "NNC",  "NNC_increase", "NNC_spec_increase", 
+                             "bins", "novel", "instant", "cumul", "country", "evenness", "delta_eveness", 
+                             "shannon.d", "delta_shannon",
                              'total.n')]
     
     return(matrix_1)
