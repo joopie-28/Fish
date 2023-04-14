@@ -116,7 +116,6 @@ nov.matrices <- matrix_list_seasonality[full.novel.mat.season$site[which(full.no
 # and use type I SIMPROF to find which clusters are significantly
 # different at alpha = 0.05.
 
-### CURRENTLY OVERESTIMATING LENGTHS!!!!! TIME SHOULD BE AT LAST COMMUNITY, NOT SUCCEEDING ONE!!!!!!
 novelty.pers <- do.call(c, 
                         lapply(1:length(nov.matrices), function(m){
                           print(m)
@@ -490,11 +489,11 @@ PersistenceFrame <- FullEnvFrame|>
   filter(novel.class == 'Persister' | novel.class == 'BLIP') |>
   filter(consistency == T) |>
   mutate(binary_pers = ifelse(novel.class == "Persister", 1, 0),
-         novel.length = ifelse(novel.class == 'BLIP', 1, novel.length),
+         novel.length = ifelse(novel.class == 'BLIP', 0.5, novel.length),
          Survival_Status = ifelse(novel.class == 'BLIP', 0, Survival_Status)) |>
   # Silly workaround because i misinterpeted the 0 and 1's for survival, 
   # need to flip them for the algorithm to make sense of the numbers.
-  # 1 actually symbolises death, or a censoring event.
+  # 1 actually  a censoring event.
   mutate(Survival_Status = ifelse(Survival_Status == 1, 0, 1))
 
 
@@ -504,17 +503,17 @@ PersistenceFrame <- FullEnvFrame|>
 #### Modelling 1. Rates of Novelty Emergence around the globe ####
 
 # Three separate models for each novelty type, at the community level
-fixed.emergence.nov.mod <- glmer(novel ~ position+ (1|site_ID/Quarter), 
+fixed.emergence.nov.mod <- glmer(novel ~ position+ (1|Quarter/site_ID), 
                                  data = FullEnvFrame, family= 'binomial')
 
-fixed.emergence.cumul.mod <- glmer(cumul ~  bin_lag + position + (1|Quarter/site_ID), 
+fixed.emergence.cumul.mod <- glmer(cumul ~ position + (1|Quarter/site_ID), 
                                    data = FullEnvFrame, family= 'binomial')
 
-fixed.emergence.instant.mod <- glmer(instant ~ bin_lag + position + (1|Quarter/site_ID), 
+fixed.emergence.instant.mod <- glmer(instant ~ position + (1|Quarter/site_ID), 
                                      data = FullEnvFrame, family= 'binomial')
 
 # One model at the time series level
-broad.emergence.mod <- glmer(binary_novel ~ 1, 
+broad.emergence.mod <- glm(binary_novel ~ 1, 
                              data = FullSiteFrame, family = 'binomial')
 
 #### Modelling 2. Modelling persistence length as a survival analysis ####
@@ -542,7 +541,7 @@ null_fit <- coxph(surv ~ 1,
                   data =Scale_PersFrame)
 
 # Create a mixed-effects cox regression model with covariates.
-fit <- coxph(surv ~ delta_eveness + dis_m3_pyr + NNC_spec_increase+
+fit <- coxph(surv ~ shannon.d + dis_m3_pyr + NNC_increase+
                 run_mm_cyr+ele_mt_cav + for_pc_cse,
              data = subset(Scale_PersFrame)) # INC*Total_inv not significnat here, remove for interpetability
   
@@ -601,7 +600,7 @@ survminer::ggforest(fit)
  #### Modelling 3. Drivers of emergence #####
 
 # Scale necessary variables
-Scale_FullEnv<-FullEnvFrame %>% 
+Scale_FullEnv<-FullEnvFrame |>
   mutate_at(c('position','loss', 'gain','bin_lag', 'shannon.d' ,"run_mm_cyr",'delta_eveness',"ari_ix_cav", "NNC_increase","total_inv", "DIST_DN_KM","DIST_UP_KM","run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM",
               "dis_m3_pyr",'ria_ha_csu',"run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
               'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
@@ -609,9 +608,9 @@ Scale_FullEnv<-FullEnvFrame %>%
             ~(scale(., center =T, scale =T) %>% as.vector)) 
  
 # Binomial glmm looking at community level emergence using ecological and environemntal variables
-EmergCommMod <- glmer(novel~position +loss+shannon.d +NNC_increase+ dis_m3_pyr +run_mm_cyr + 
-                        aet_mm_cyr +ele_mt_cav+ppd_pk_uav+
-                        (1|site_ID/Quarter), 
+EmergCommMod <- glmer(novel~position+loss+shannon.d+NNC_increase+ dis_m3_pyr +run_mm_cyr + 
+                        aet_mm_cyr + ele_mt_cav+ppd_pk_uav+
+                        (1|Quarter/site_ID), 
               data = Scale_FullEnv, family = 'binomial')
 print(summary(EmergCommMod), correlation = T)
 
@@ -639,9 +638,9 @@ forestPlotter <- function(model, labels){
 }
 
 forestPlotter(EmergCommMod, labels = c('Position', 'Species Loss',
-                                       'Shannon Diversity', 'Invasive Species Increase','Invasive Species (Basin)',
+                                       'Shannon Diversity', 'Exotic Species Increase',
                                        'Average Yearly Discharge', 'Average Yearly Run-Off','Average Yearly Evapotranspiration',
-                                       'Elevation', 'Human Population Density','Invasive Species Increase:Invasive Species (Basin)' ))
+                                       'Elevation', 'Human Population Density'))
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
@@ -650,7 +649,7 @@ Scale_FullGeo<-FullSiteFrame |>
               'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
               'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_cyr","UPLAND_SKM"), 
             ~(scale(., center =T, scale =T) %>% as.vector)) 
-EmergSiteMod <- glm(binary_novel ~ dis_m3_pyr +run_mm_cyr + aet_mm_cyr +ele_mt_cav+ppd_pk_uav, 
+EmergSiteMod <- glm(binary_novel ~ n_timeseries+dis_m3_pyr +run_mm_cyr + aet_mm_cyr +ele_mt_cav+ppd_pk_uav , 
               data = Scale_FullGeo, family = 'binomial') 
 summary(EmergSiteMod)
 forestPlotter(EmergSiteMod)
@@ -753,12 +752,128 @@ points(y=rep(0.2, nrow(subset(geo.timeseries.full,binary_novel == 1))), x= subse
 dev.off()
 
 ###### END OF MAIN ANALYSES ######
+mds.cluster.plotter <- function(matrix){
+  
+  # Set plotting params
+  par(mfrow = c(1,2))
+  
+  
+  
+  
+  # Extract labels
+  label <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                  alpha = 0.05,
+                                  metric = "bray",
+                                  plot = F, 
+                                  site = "NA",
+                                  plot.data = FALSE,
+                                  gam.max.k = -1)
+  
+  matrix$category <- label$cat
+  matrix$colour <- NA
+  
+  # Assign colours
+  for (i in 1:nrow(matrix)) {
+    if(matrix$category[i] == "cumul"){
+      matrix$colour[i] <- "skyblue"
+    }
+    if(matrix$category[i] == "instant"){
+      matrix$colour[i] <- "red1"
+    }
+    if(matrix$category[i] == "novel"){
+      matrix$colour[i] <- "orange"
+    }
+    if(matrix$category[i] == "back"){
+      (matrix$colour[i] <- "grey")}
+  }
+  
+  # Run MDS 
+  NMDS=metaMDS(matrix[,-c(ncol(matrix), (ncol(matrix)-1))], 
+               k=2, trymax = 10000)
+  plot(NMDS, type = "n", ylab = "MDS2", xlab = "MDS1")
+  usr<-par("usr")
+  text(x = median(c(usr[3], usr[1])), 
+       y = usr[4],
+       labels = "a)",
+       adj = c(-0.6, 1.6),
+       col = "black")
+  
+  points(x = NMDS$points[,"MDS1"], 
+         y = NMDS$points[, "MDS2"], 
+         bg = matrix$colour,
+         pch = 21,
+         col = "black",
+         cex = 1.4)
+  
+  for (i in 1:(nrow(NMDS$points)-1)){
+    
+    arrows(x0 = NMDS$points[i,"MDS1"], 
+           y0 = NMDS$points[i, "MDS2"], 
+           x1 = NMDS$points[i+1,"MDS1"], 
+           y1 = NMDS$points[i+1, "MDS2"], length = 0.05, lwd = 1)
+  }
+  
+  print("Clustering")
+  
+  test <- simprof(data = matrix[,-c(ncol(matrix), (ncol(matrix)-1))], num.expected = 1000,
+                  num.simulated = 999, method.distance ="czekanowski", 
+                  method.cluster = "average"
+                  ,alpha=0.05, undef.zero = T)
+  
+  temp <- simprof.plot(test, plot = F)
+  
+  
+  dendro.col.df <- data.frame(labels = as.numeric(labels(temp)))
+  dendro.col.df$colour <- NA
+  dendro.col.df$cat <- NA
+  
+  for(i in 1:nrow(dendro.col.df)){
+    
+    index <- which(as.numeric(label$bins) == dendro.col.df$labels[i])
+    dendro.col.df$cat[i] <- label$cat[index]
+    
+    if(dendro.col.df$cat[i] == "cumul"){
+      dendro.col.df$colour[i] <- "skyblue"
+    }
+    if(dendro.col.df$cat[i] == "instant"){
+      dendro.col.df$colour[i] <- "red1"
+    }
+    if(dendro.col.df$cat[i] == "novel"){
+      dendro.col.df$colour[i] <- "orange"
+    }
+    if(dendro.col.df$cat[i] == "back"){
+      dendro.col.df$colour[i] <- "grey"}
+  }
+  
+  # Plot the Dendrogram
+  
+  labels_colors(temp) <- dendro.col.df$colour
+  
+  labels(temp) <- paste0(dendro.col.df$cat, "-", dendro.col.df$labels)
+  
+  plot(temp, ylab = "Height")
+  usr<-par("usr")
+  text(x = median(c(usr[3], usr[1])), 
+       y = usr[4],
+       labels = "b)",
+       adj = c(-1.8, 1.6),
+       col = "black")
+  
+}
+mds.cluster.plotter(nov.matrices[["G98.4/1"]])
 
 
-#### Table 1. 
-extract.coefs(broad.emergence.mod)
 
-#### Table 2.
+#### Emergence rates at community and site level.
+create_ouputCSV(fixed.emergence.nov.mod, name ='Nov_Emergence_Comm')
+create_ouputCSV(fixed.emergence.cumul.mod, name ='Cum_Emergence_Comm')
+create_ouputCSV(fixed.emergence.instant.mod, name ='Inst_Emergence_Comm')
+
+
+#### Drivers at community and site level.
+create_ouputCSV(EmergCommMod, name ='Community_Emergence_Drivers')
+create_ouputCSV(EmergSiteMod, name ='Community_Site_Drivers')
+
 
 #### Table 3.
 

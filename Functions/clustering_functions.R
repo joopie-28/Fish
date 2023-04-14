@@ -827,7 +827,7 @@ nov.cluster.id.V7 <- function(matrix, method_clus,
       
       
       # Initialize a class variable
-      if(start == end | length.bins == 1){
+      if(start == end){
         
         Class <- "BLIP"
         length <- 0

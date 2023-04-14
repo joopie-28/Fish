@@ -87,7 +87,7 @@ for(i in 1:3){
   }
   
   # Create the plot!
-  mds.plotter(matrices[[234]], col.vec, 
+  mds.plotter(nov.matrices[[1]], 'orange', 
               ylim = c(-0.5, 2.5), xlim = c(-1, 1.5)) # Blip
   
   axis(side =1, line =0, at= c(-1, 0, 1))
@@ -214,3 +214,111 @@ mtext("MDS1", side=1, line=2, cex=1, col="black", outer=TRUE)
 mtext("MDS2", side=2, line=2, cex=1, col="black", outer=TRUE)
 
 dev.off()
+mds.cluster.plotter <- function(matrix){
+  
+  # Set plotting params
+  par(mfrow = c(1,2))
+  
+  
+  
+  
+  # Extract labels
+  label <- identify.novel.gam.MDS(site.sp.mat = matrix, 
+                                  alpha = 0.05,
+                                  metric = "bray",
+                                  plot = F, 
+                                  site = "NA",
+                                  plot.data = FALSE,
+                                  gam.max.k = -1)
+  
+  matrix$category <- label$cat
+  matrix$colour <- NA
+  
+  # Assign colours
+  for (i in 1:nrow(matrix)) {
+    if(matrix$category[i] == "cumul"){
+      matrix$colour[i] <- "skyblue"
+    }
+    if(matrix$category[i] == "instant"){
+      matrix$colour[i] <- "red1"
+    }
+    if(matrix$category[i] == "novel"){
+      matrix$colour[i] <- "orange"
+    }
+    if(matrix$category[i] == "back"){
+      (matrix$colour[i] <- "grey")}
+  }
+  
+  # Run MDS 
+  NMDS=metaMDS(matrix[,-c(ncol(matrix), (ncol(matrix)-1))], 
+               k=2, trymax = 10000)
+  plot(NMDS, type = "n", ylab = "MDS2", xlab = "MDS1")
+  usr<-par("usr")
+  text(x = median(c(usr[3], usr[1])), 
+       y = usr[4],
+       labels = "a)",
+       adj = c(-0.6, 1.6),
+       col = "black")
+  
+  points(x = NMDS$points[,"MDS1"], 
+         y = NMDS$points[, "MDS2"], 
+         bg = matrix$colour,
+         pch = 21,
+         col = "black",
+         cex = 1.4)
+  
+  for (i in 1:(nrow(NMDS$points)-1)){
+    
+    arrows(x0 = NMDS$points[i,"MDS1"], 
+           y0 = NMDS$points[i, "MDS2"], 
+           x1 = NMDS$points[i+1,"MDS1"], 
+           y1 = NMDS$points[i+1, "MDS2"], length = 0.05, lwd = 1)
+  }
+  
+  print("Clustering")
+  
+  test <- simprof(data = matrix[,-c(ncol(matrix), (ncol(matrix)-1))], num.expected = 1000,
+                  num.simulated = 999, method.distance ="czekanowski", 
+                  method.cluster = "average"
+                  ,alpha=0.05, undef.zero = T)
+  
+  temp <- simprof.plot(test, plot = F)
+  
+  
+  dendro.col.df <- data.frame(labels = as.numeric(labels(temp)))
+  dendro.col.df$colour <- NA
+  dendro.col.df$cat <- NA
+  
+  for(i in 1:nrow(dendro.col.df)){
+    
+    index <- which(as.numeric(label$bins) == dendro.col.df$labels[i])
+    dendro.col.df$cat[i] <- label$cat[index]
+    
+    if(dendro.col.df$cat[i] == "cumul"){
+      dendro.col.df$colour[i] <- "skyblue"
+    }
+    if(dendro.col.df$cat[i] == "instant"){
+      dendro.col.df$colour[i] <- "red1"
+    }
+    if(dendro.col.df$cat[i] == "novel"){
+      dendro.col.df$colour[i] <- "orange"
+    }
+    if(dendro.col.df$cat[i] == "back"){
+      dendro.col.df$colour[i] <- "grey"}
+  }
+  
+  # Plot the Dendrogram
+  
+  labels_colors(temp) <- dendro.col.df$colour
+  
+  labels(temp) <- paste0(dendro.col.df$cat, "-", dendro.col.df$labels)
+  
+  plot(temp, ylab = "Height")
+  usr<-par("usr")
+  text(x = median(c(usr[3], usr[1])), 
+       y = usr[4],
+       labels = "b)",
+       adj = c(-1.8, 1.6),
+       col = "black")
+  
+}

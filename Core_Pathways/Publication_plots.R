@@ -525,7 +525,7 @@ pdf(file = "/Users/sassen/Desktop/plot_1.pdf",
     width = 12,
     height = 7)
 
-mds.cluster.plotter(matrices[[1]][["G7620"]])
+mds.cluster.plotter(nov.matrices[["G98.4/1"]])
 dev.off()
 
 #### Plot 2A. Global emergence rates Venn ###

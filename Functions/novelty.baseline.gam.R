@@ -13,28 +13,7 @@
 
 novelty.trajectory.plotter <- function(ID){
   
-  matrix <- Fish_Communities_A$BioRealm_Matrices_A$palearctic_mat_A[[ID]]
-  
-  if(is.null(matrix)){
-    
-    matrix <- Fish_Communities_A$BioRealm_Matrices_A$nearctic_mat_A[[ID]]
-    
-  }
-  if(is.null(matrix)){
-    
-    matrix <- Fish_Communities_A$BioRealm_Matrices_A$afrotropics_mat_A[[ID]]
-    
-  }
-  if(is.null(matrix)){
-    
-    matrix <- Fish_Communities_A$BioRealm_Matrices_A$neotropics_mat_A[[ID]]
-    
-  }
-  if(is.null(matrix)){
-    
-    matrix <- Fish_Communities_A$BioRealm_Matrices_A$australasia_mat_A[[ID]]
-    
-  }
+  matrix <- nov.matrices[[ID]]
   
   
   label_frame <- identify.novel.gam.MDS(site.sp.mat = matrix, 
