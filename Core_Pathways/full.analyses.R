@@ -123,6 +123,8 @@ novelty.pers <- do.call(c,
                                             method_clus = 'single',
                                             alpha_clust = 0.05)
                         })) 
+# Save to outputs
+saveRDS(novelty.pers, './outputs/SIMPROF_Persistence_Output.RDS')
 
 # Write the results back into our main data frame.
 full.novel.mat.season$novel.length <- NA
@@ -513,17 +515,10 @@ fixed.emergence.instant.mod <- glmer(instant ~ position + (1|Quarter/site_ID),
                                      data = FullEnvFrame, family= 'binomial')
 
 # One model at the time series level
-broad.emergence.mod <- glm(binary_novel ~ 1, 
-                             data = FullSiteFrame, family = 'binomial')
+broad.emergence.mod <- glm(binary_novel ~ 1 , 
+                             data = Scale_FullGeo, family = 'binomial')
 
 #### Modelling 2. Modelling persistence length as a survival analysis ####
-
-## Cox Mixed-Effects Model
-
-# Load the survival packages
-library(survival)
-library(survminer)
-library(coxme)
 
 # Create a survival object with time and event variables
 PersistenceFrame$surv <- with(PersistenceFrame, Surv(novel.length, Survival_Status))
@@ -540,64 +535,21 @@ Scale_PersFrame<-PersistenceFrame %>%
 null_fit <- coxph(surv ~ 1, 
                   data =Scale_PersFrame)
 
-# Create a mixed-effects cox regression model with covariates.
-fit <- coxph(surv ~ shannon.d + dis_m3_pyr + NNC_increase+
+# Create a cox regression model with covariates.
+cox.mod <- coxph(surv ~ shannon.d + dis_m3_pyr + NNC_increase+
                 run_mm_cyr+ele_mt_cav + for_pc_cse,
              data = subset(Scale_PersFrame)) # INC*Total_inv not significnat here, remove for interpetability
   
 
 # Likelihood test for fitted model
-lr_test <- anova(null_fit, fit)
-Anova(fit)
-# Test for proportional hazard assumption (independence of events)
-cox.zph(fit)
+lr_test <- anova(null_fit, cox.mod)
 
 # Inspect deviance residuals versus observations
-ggcoxdiagnostics(fit, type = "deviance",
+ggcoxdiagnostics(cox.mod, type = "deviance",
                  linear.predictions = FALSE, ggtheme = theme_bw())
 
-# Test plotting functon
-pdf(file = "/Users/sassen/Desktop/Exploring_Cox.pdf",
-    width = 15,
-    height = 10)
 
-# Plot the survival curves
-temp<-survfit(fit)
-plot(temp,
-     xlab = "Persistence Duration (Years post Emergence)", 
-     ylab = "Persistence Probability of Novel Composition", col = c(rgb(1,0.6,0,1), rgb(1,0.6,0,0), 
-                                                                    rgb(1,0.6,0,0)),
-     lwd = c(3,1,1), lty = c(1,1,1))
-for (i in 1:length(temp$lower)){
-  polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
-         y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
-         col = rgb(1,0.6,0,0.3),
-         border = rgb(1,0,0,0))
-  if(temp$n.censor[i] != 0){
-    
-    segments(x0=temp$time[i], x1 = temp$time[i],
-             y0 = temp$surv[i]-0.01, y1 = temp$surv[i]+0.01,
-             col = rgb(1,0.6,0,1))
-  }
-  
-  #points(x=temp$time[i],
-      #  y=temp$surv[i],
-      #  pch=19, col = 'orange')
-}
-
-# Communicate that there are blips
-abline(h=temp$surv[1], lty = 2)
-
-text('Spurious Novelty', x=17, y=0.35, srt = 0, cex=1.5)
-text('Persistent Novelty', x=17, y=0.25, srt = 0, cex=1.5)
-dev.off()
-ggforest(fit)
-# What if we looked at time to go BACK to a pre novel state???
-survminer::ggforest(fit)
-
-
-
- #### Modelling 3. Drivers of emergence #####
+#### Modelling 3. Drivers of emergence #####
 
 # Scale necessary variables
 Scale_FullEnv<-FullEnvFrame |>
@@ -608,56 +560,40 @@ Scale_FullEnv<-FullEnvFrame |>
             ~(scale(., center =T, scale =T) %>% as.vector)) 
  
 # Binomial glmm looking at community level emergence using ecological and environemntal variables
-EmergCommMod <- glmer(novel~position+loss+shannon.d+NNC_increase+ dis_m3_pyr +run_mm_cyr + 
+EmergCommMod <- glmer(novel~position+loss+shannon.d+ NNC_increase+dis_m3_pyr +run_mm_cyr + 
                         aet_mm_cyr + ele_mt_cav+ppd_pk_uav+
                         (1|Quarter/site_ID), 
               data = Scale_FullEnv, family = 'binomial')
+
 print(summary(EmergCommMod), correlation = T)
+unif.test <- testUniformity(EmergCommMod)
+disp.test <- testDispersion(EmergCommMod)
 
-forestPlotter <- function(model, labels){
-  
-  # Set theme
-  set_theme(
-    geom.outline.color = "antiquewhite4", 
-    geom.outline.size = 1, 
-    geom.label.size = 2,
-    title.size = 1.5, 
-    axis.angle.x = 0, 
-    axis.textcolor = "black",
-    axis.linecolor.x = 'black',
-    axis.linecolor.y = 'black',
-    base = theme_classic(),
-    title.color = 'white'
-      
-  )
-  # plot model
-  plot_model(model, show.p = T, axis.labels =rev(labels),
-             col = c('red', 'steelblue')) +
-    geom_hline(yintercept = 1, colour='black', lty = 2)
-  
-}
-
-forestPlotter(EmergCommMod, labels = c('Position', 'Species Loss',
-                                       'Shannon Diversity', 'Exotic Species Increase',
-                                       'Average Yearly Discharge', 'Average Yearly Run-Off','Average Yearly Evapotranspiration',
-                                       'Elevation', 'Human Population Density'))
 
 # Binomial glm looking at site-level emergence proportions using only environmental variables,
 # essentially inspecting whether or characteristics of sites are associated with novelty.
+
 Scale_FullGeo<-FullSiteFrame |>
   mutate_at(c("run_mm_cyr", 'ppd_pk_cav','hft_ix_c09',"DIST_DN_KM","DIST_UP_KM","dis_m3_pyr",
               'ria_ha_csu',"ele_mt_cav","urb_pc_cse", "crp_pc_cse", "pac_pc_cse", "pst_pc_cse",
               'for_pc_cse', 'ari_ix_cav', 'pre_mm_cyr','rdd_mk_cav',"ppd_pk_uav","aet_mm_cyr","UPLAND_SKM"), 
-            ~(scale(., center =T, scale =T) %>% as.vector)) 
-EmergSiteMod <- glm(binary_novel ~ n_timeseries+dis_m3_pyr +run_mm_cyr + aet_mm_cyr +ele_mt_cav+ppd_pk_uav , 
+            ~(scale(., center =T, scale =T) %>% as.vector)) |>
+  # line of code to merge the pfaff L8 basins back to main frame. Can be used to merge
+  # basin codes at any pfaff level.
+  left_join(HYBAS_scheme[,c('HYBAS_ID_8','TimeSeriesID')], by= c('Site'='TimeSeriesID')) |>
+  unique() 
+
+EmergSiteMod <- glmer(binary_novel ~n_timeseries + dis_m3_pyr+run_mm_cyr + aet_mm_cyr +ele_mt_cav+ppd_pk_uav+
+                       (1|HYBAS_ID_8) , 
               data = Scale_FullGeo, family = 'binomial') 
 summary(EmergSiteMod)
-forestPlotter(EmergSiteMod)
+unif.test <- testUniformity(EmergSiteMod)
+disp.test <- testDispersion(EmergSiteMod)
 
 
 
 
-# Modelling 4. First state post novelty. MIGHT NOT DO THIS
+# Modelling 4. First state post novelty. MIGHT NOT DO THIS---
 
 # Simply looking at the averages and if they differ at all.
 test <- FullEnvFrame |>
@@ -666,67 +602,87 @@ test <- FullEnvFrame |>
 
 summary(glm(binary_postnov~position+novel.class , data = test, family = "binomial")) # Is this a result? consult Simon.
 
-#### Combine all models in a list for ease of analysis ####
 
-NovelFishModels <- list('Emergence Rates' = list("fixed.emergence.nov.mod" = fixed.emergence.nov.mod,
-                              "fixed.emergence.cumul.mod" = fixed.emergence.cumul.mod,
-                              "fixed.emergence.instant.mod" = fixed.emergence.instant.mod,
-                              "broad.emergence.mod" = broad.emergence.mod),
-     'Persistence Models' = list("persLengthMod" = persLengthMod,
-                                 "persBinaryNullMod" = persBinaryNullMod,
-                                 "persBinaryFullMod" = persBinaryFullMod),
-     'Emergence Drivers' = list("EmergCommMod" = EmergCommMod,
-                                "EmergSiteMod" = EmergSiteMod))
-
-###### PHASE 3 - MODEL DIAGNOSTICS AND FILE EXPORT ######
-
-# Test for overdispersion in each model using DHARma package.
-
-CheckDispersion(models)
-
-# vif
-
-# Create output csv's for all models using a custom function.
-lapply(1:length(flatten(NovelFishModels)), function(x){
-  extract.coefs(flatten(NovelFishModels)[x])
-})
 
 ###### PHASE 4 - PRODUCING TABLES AND FIGURES ######
 
 #### Figure 1A-C. General emergence and spatial patterns of novelty in USA and EU ####
 
+
 # Fig 1A
-pdf(file = "/Users/sassen/Desktop/Figure_test_EU.pdf",
-    width = 15,
-    height = 12.5)
-complete.basin.novelty.plotter.PAL(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
-dev.off()
-
-# Fig 1B
-pdf(file = "/Users/sassen/Desktop/Figure_test_NA.pdf",
-    width = 25,
-    height = 8)
-complete.basin.novelty.plotter.NEA(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
-dev.off()
-
-# Fig 1C
-pdf(file = "/Users/sassen/Desktop/Figure_test_venn.pdf",
+pdf(file = "./Plots/Figure_1a.pdf",
     width = 15,
     height = 15)
 venn_plot_main(full.novel.mat.season)
 dev.off()
 
+# Fig 1B
+pdf(file = "./Plots/Figure_1b.pdf",
+    width = 15,
+    height = 12.5)
+complete.basin.novelty.plotter.PAL(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
+dev.off()
 
-#### Figure 2. Visualising model predictions for invader presence ####
-pdf(file = "/Users/sassen/Desktop/Figure_4.pdf",
-    width = 12,
-    height = 10)
-visreg(mod.INV, 'INC_increase' ,scale = 'response', rug=F, ylim = c(0,1),ylab="Probability of Novel Community Emergence",
-       xlab="Change in relative abundance of exotics")
-points(novel~INC_increase, data= full.novel.mat.season,pch=19, col = alpha('grey', alpha=0.4), cex=0.8)
+# Fig 1C
+pdf(file = "./Plots/Figure_1c.pdf",
+    width = 25,
+    height = 8)
+complete.basin.novelty.plotter.NEA(full.novel.mat.season,FullGeoFrame, HYBAS_scheme, 7)
+dev.off()
 
+
+#### Figure 2. Drivers of emergence - forest plots ####
+pdf(file = "./Plots/Figure_2a.pdf",
+    width = 8,
+    height = 5)
+
+forestPlotter(EmergCommMod, labels = c('Position', 'Species Loss',
+                                       'Shannon Diversity', 'Exotic Species Increase',
+                                       'Average Yearly Discharge', 'Average Yearly Run-Off','Average Yearly Evapotranspiration',
+                                       'Elevation', 'Human Population Density'))
+dev.off()
+
+pdf(file = "./Plots/Figure_2b.pdf",
+    width = 8,
+    height = 5)
+
+forestPlotter(EmergSiteMod, labels = c('Number of Time Series','Average Yearly Discharge', 'Average Yearly Run-Off','Average Yearly Evapotranspiration',
+                                       'Elevation', 'Human Population Density'))
+dev.off()
+
+
+#### Figure 3. Persistence analysis - Kaplan-Meier and drivers ####
+pdf(file = "./Plots/Figure_3a.pdf",
+    width = 10,
+    height = 8)
+
+# Plot the survival curves
+temp<-survfit(cox.mod)
+plot(temp,
+     xlab = "Persistence Duration (Years post Emergence)", 
+     ylab = "Persistence Probability of Novel Composition", col = c(rgb(1,0.6,0,1), rgb(1,0.6,0,0), 
+                                                                    rgb(1,0.6,0,0)),
+     lwd = c(3,1,1), lty = c(1,1,1),
+     xlim=c(0,max(temp$time)))
+for (i in 1:length(temp$lower)){
+  polygon(x =c(temp$time[i],temp$time[i+1], temp$time[i+1], temp$time[i]), 
+          y = c(temp$upper[i],temp$upper[i],temp$lower[i],temp$lower[i]) , 
+          col = rgb(1,0.6,0,0.3),
+          border = rgb(1,0,0,0))
+  if(temp$n.censor[i] != 0){
+    
+    segments(x0=temp$time[i], x1 = temp$time[i],
+             y0 = temp$surv[i]-0.01, y1 = temp$surv[i]+0.01,
+             col = rgb(1,0.6,0,1))
+  }
+  
+ 
+}
 
 dev.off()
+
+
+
 #### Figure 3. Scatter plot showing transitions from novelty to the next community on an axis of demographic processes ####
 
 # Plot 3a. Immigration versus Origination
@@ -751,7 +707,7 @@ points(binary_novel~Anthromod, data= geo.timeseries.full,pch=19, col = alpha('gr
 points(y=rep(0.2, nrow(subset(geo.timeseries.full,binary_novel == 1))), x= subset(geo.timeseries.full,binary_novel == 1)$Anthromod, pch=19, col = alpha('grey', alpha=0.4), cex=0.8)
 dev.off()
 
-###### END OF MAIN ANALYSES ######
+
 mds.cluster.plotter <- function(matrix){
   
   # Set plotting params
@@ -860,29 +816,27 @@ mds.cluster.plotter <- function(matrix){
        col = "black")
   
 }
-mds.cluster.plotter(nov.matrices[["G98.4/1"]])
+mds.cluster.plotter(nov.matrices[["G98.4/1"]]) # add on tim's ndf plots
 
 
+#### Export tables as csv's ####
 
 #### Emergence rates at community and site level.
 create_ouputCSV(fixed.emergence.nov.mod, name ='Nov_Emergence_Comm')
 create_ouputCSV(fixed.emergence.cumul.mod, name ='Cum_Emergence_Comm')
 create_ouputCSV(fixed.emergence.instant.mod, name ='Inst_Emergence_Comm')
+create_ouputCSV(broad.emergence.mod, name ='Nov_Emerg_Site')
 
+# Need to add dynamic random effects
 
 #### Drivers at community and site level.
 create_ouputCSV(EmergCommMod, name ='Community_Emergence_Drivers')
 create_ouputCSV(EmergSiteMod, name ='Community_Site_Drivers')
 
-
-#### Table 3.
-
-#### Table 4.
-# To do #
-# Complete this document
-
-# Write up results and the rest of the paper. That's it!
+#### Drivers of persistence (Cox regression)
+create_ouputCSV(cox.mod, name='Persistence_Drivers')
+write_csv(round(as.data.frame(cox.zph(cox.mod)$table),3), 
+          file = "./outputs/Model_outputs/CoxDiagnostics.csv") # diagnostics
 
 
-
-
+###### END OF MAIN ANALYSES ######
